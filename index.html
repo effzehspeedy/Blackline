@@ -179,6 +179,24 @@ img{max-width:100%}
 .newrow{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px}
 .newrow div{min-width:0;overflow-wrap:anywhere}
 .count.hot{background:var(--accent);color:var(--accent-ink)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;min-width:0}
+.tile .k{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.tile .v{font-family:var(--f-display);font-size:34px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.tile.hi{border-color:var(--accent)} .tile.hi .v{color:var(--accent)}
+.lsrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--raise);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+.lsrow input{flex:1 1 160px;min-width:0;background:var(--field);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+.lsrow .rk{min-width:1.6em}
+.lsrow.fixed{opacity:.7}
+.iconbtn{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 9px;color:var(--ink);font-weight:600}
+.iconbtn:disabled{opacity:.35;cursor:default}
+.posbox{display:flex;flex-direction:column;gap:8px}
+.posrow{display:grid;grid-template-columns:minmax(0,1fr) 96px 80px auto;gap:8px;align-items:center;background:var(--raise);border:1px solid var(--line);border-radius:6px;padding:8px}
+.posrow select{background:var(--field);border:1px solid var(--line);border-radius:6px;padding:8px;min-width:0;width:100%}
+.posrow .pos-p{text-align:right;font-family:var(--f-mono);font-size:13px;white-space:nowrap}
+@media (max-width:520px){.posrow{grid-template-columns:minmax(0,1fr) 100px}.posrow .pos-p{text-align:left}}
+.calcinfo{font-size:12px;color:var(--muted);background:var(--raise);border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin-top:-6px}
+.calcinfo b{color:var(--accent)}
 .info-field{background:var(--field);border:1px dashed var(--line);border-radius:6px;padding:9px 10px;font-family:var(--f-mono);font-weight:400;font-size:13px}
 </style>
 </head>
@@ -291,9 +309,19 @@ const auth=getAuth(fbApp);
 const db=getFirestore(fbApp);
 
 /* ---------- Ränge & Rechte ---------- */
-const RANKS=["Geschäftsführer/in","Stellvertretende/r Geschäftsführer/in","Leitende/r Angestellte/r","Sicherheitsberater","Personenschutz","Security Mitarbeiter","Ausbildung","Fahrer","Privatermittler"];
+const R_K="Kunde erhält von uns",R_W="Wir erhalten vom Partner";
+const TOP_RANKS=["Geschäftsführer/in","Stellvertretende/r Geschäftsführer/in","Leitende/r Angestellte/r"];
+const DEFAULT_LISTS={
+  raenge:[{nr:3,name:"Sicherheitsberater"},{nr:4,name:"Personenschutz"},{nr:5,name:"Security Mitarbeiter"},{nr:6,name:"Ausbildung"},{nr:7,name:"Fahrer"},{nr:8,name:"Privatermittler"}],
+  abrechnung:["pro Stunde","pro Einsatz","pro Tag","pauschal"],
+  kundenarten:["Privatperson","Unternehmen","Organisation","Behörde","Partner"],
+  sonderArten:["Rabatt","Sonderpreis","Freileistung","Sonstiges"]
+};
+let LISTS=JSON.parse(JSON.stringify(DEFAULT_LISTS));
+const rankList=()=>TOP_RANKS.map((n,i)=>({nr:i,name:n})).concat(LISTS.raenge);
+function rankPos(i){if(i==null||i===99)return 99;if(i<3)return i;const k=LISTS.raenge.findIndex(r=>r.nr===i);return k<0?98:3+k}
 const rk=d=>(d&&typeof d.rang==="number")?d.rang:99;
-const rankName=i=>RANKS[i]||"Ohne Rang";
+const rankName=i=>(typeof i==="number"&&i<3)?TOP_RANKS[i]:((LISTS.raenge.find(r=>r.nr===i)||{}).name||"Ohne Rang");
 const TONE={"Paket":"gold","Aktiv":"good","Bestätigt":"good","Erledigt":"good","Angefragt":"warn","Interessent":"warn","Entwurf":"warn","Urlaub":"warn","Pausiert":"warn","Neu":"warn","Hoch":"bad","Abgesagt":"bad","Gekündigt":"bad","Gesperrt":"bad","Beendet":"bad","Ausgelaufen":"bad","Ausgetreten":"bad","Widerrufen":"bad","Abgelaufen":"bad"};
 
 let uid=null,me=null,meLoaded=false;
@@ -314,7 +342,7 @@ const ENT={
   mitarbeiter:{label:"Mitarbeiter",one:"Mitarbeiter",nw:"Neuer Mitarbeiter",art:"den ersten Mitarbeiter",
     read:()=>P.kontakte||P.intern||P.leitung, access:()=>P.kontakte||P.leitung,
     canCreate:()=>P.leitung, canEdit:d=>canEditMA(d)||P.kontakte, canDelete:d=>d.id!==uid&&(P.full||(P.leitung&&!d.login&&rk(d)>=3)),
-    sort:(a,b)=>rk(a)-rk(b)||String(a.name||"").localeCompare(String(b.name||""),"de"),
+    sort:(a,b)=>rankPos(rk(a))-rankPos(rk(b))||String(a.name||"").localeCompare(String(b.name||""),"de"),
     fields:[
       {n:"name",l:"IC-Name",t:"text",req:1,col:1},
       {n:"login",l:"Login-Name",t:"info",hint:"Mit diesem Namen meldet sich die Person an. Er ändert sich nicht, wenn du den IC-Namen oben änderst."},
@@ -339,7 +367,7 @@ const ENT={
     sort:(a,b)=>String(a.name||"").localeCompare(String(b.name||""),"de"),
     fields:[
       {n:"name",l:"Name / Firma",t:"text",req:1,col:1},
-      {n:"typ",l:"Art",t:"select",o:["Privatperson","Unternehmen","Organisation","Behörde"],def:"Privatperson",col:1},
+      {n:"typ",l:"Art",t:"select",o:()=>LISTS.kundenarten,def:"Privatperson",col:1},
       {n:"ansprechpartner",l:"Ansprechpartner",t:"text",col:1},
       {n:"telefon",l:"Telefon",t:"tel",col:1},
       {n:"status",l:"Status",t:"select",o:["Interessent","Aktiv","Pausiert","Beendet"],def:"Aktiv",col:1},
@@ -363,9 +391,11 @@ const ENT={
     canCreate:()=>P.intern,canEdit:()=>P.intern,canDelete:()=>P.intern,
     sort:(a,b)=>refText({t:"ref",ref:"kunden"},a.kunde).localeCompare(refText({t:"ref",ref:"kunden"},b.kunde),"de")||String(a.art||"").localeCompare(String(b.art||""),"de"),
     fields:[
-      {n:"kunde",l:"Kunde",t:"ref",ref:"kunden",req:1,col:1},
-      {n:"art",l:"Art",t:"select",o:["Rabatt","Sonderpreis","Freileistung","Sonstiges"],def:"Rabatt",col:1},
-      {n:"wert",l:"Wert",t:"text",col:1,hint:"z. B. 20 % oder 500 $ pro Einsatz"},
+      {n:"richtung",l:"Wer bekommt den Vorteil?",t:"select",o:[R_K,R_W],def:R_K},
+      {n:"kunde",l:"Kunde / Partner",t:"ref",ref:"kunden",req:1,col:1},
+      {n:"art",l:"Art",t:"select",o:()=>LISTS.sonderArten,def:"Rabatt",col:1},
+      {n:"rabattProzent",l:"Rabatt auf Buchungen (%)",t:"number",col:1,showIf:{f:"richtung",eq:R_K},hint:"Wird bei Buchungen dieses Kunden automatisch abgezogen, solange die Vereinbarung aktiv und gültig ist."},
+      {n:"wert",l:"Vorteil kurz",t:"text",col:1,hint:"z. B. 20 % auf Essen, Gratis-Getränke, 500 $ pro Einsatz"},
       {n:"gueltigBis",l:"Gültig bis",t:"date",col:1},
       {n:"beschreibung",l:"Beschreibung",t:"textarea"},
       {n:"status",l:"Status",t:"select",o:["Aktiv","Abgelaufen","Widerrufen"],def:"Aktiv",col:1}]},
@@ -375,14 +405,16 @@ const ENT={
     sort:(a,b)=>String(b.datum||"").localeCompare(String(a.datum||""))||String(b.uhrzeit||"").localeCompare(String(a.uhrzeit||"")),
     fields:[
       {n:"kunde",l:"Kunde",t:"ref",ref:"kunden",req:1,col:1},
-      {n:"leistung",l:"Leistung",t:"ref",ref:"preise",col:1},
+      {n:"positionen",l:"Leistungen",t:"pos",col:1},
       {n:"datum",l:"Datum",t:"date",req:1,col:1},
       {n:"uhrzeit",l:"Uhrzeit",t:"time"},
-      {n:"dauer",l:"Dauer (Std.)",t:"number"},
-      {n:"mitarbeiter",l:"Eingeteilte Mitarbeiter",t:"multiref",ref:"mitarbeiter",col:1},
+      {n:"aufschlag",l:"Aufschlag (%)",t:"number",hint:"z. B. 20 für Nacht- oder Risikozuschlag. Leer lassen für keinen Aufschlag."},
+      {n:"rabatt",l:"Rabatt (%)",t:"number",hint:"Wird aus einer aktiven Sondervereinbarung des Kunden übernommen. Du kannst ihn ändern."},
+      {n:"mitarbeiter",l:"Eingeteilte Mitarbeiter",t:"multiref",ref:"mitarbeiter",col:1,filter:m=>m.status!=="Ausgetreten"&&m.status!=="Neu"&&m.status!=="Gesperrt"},
       {n:"ort",l:"Einsatzort",t:"text"},
-      {n:"betrag",l:"Betrag ($)",t:"number",money:1,col:1,hint:"Wird aus Leistung und Dauer berechnet, bis du den Betrag selbst änderst."},
-      {n:"status",l:"Status",t:"select",o:["Angefragt","Bestätigt","Erledigt","Abgesagt"],def:"Angefragt",col:1},
+      {n:"betrag",l:"Betrag ($)",t:"number",money:1,col:1,hint:"Wird aus Leistung, Stunden und Aufschlag berechnet. Du kannst ihn von Hand überschreiben."},
+      {n:"status",l:"Status",t:"select",o:["Angefragt","Bestätigt","Erledigt","Abgesagt"],def:"Angefragt",col:1,hint:"Ab „Bestätigt“ erscheint der Einsatz automatisch bei den Terminen."},
+      {n:"bezahlt",l:"Bezahlt",t:"check",hint:"Lässt sich auch unter Intern → Abrechnung abhaken."},
       {n:"notiz",l:"Notiz",t:"textarea"}]},
   preise:{label:"Preise",one:"Leistung",nw:"Neue Leistung",art:"die erste Leistung",
     read:()=>P.intern, access:()=>P.intern,
@@ -392,8 +424,10 @@ const ENT={
       {n:"leistung",l:"Name",t:"text",req:1,col:1},
       {n:"typ",l:"Typ",t:"select",o:["Einzelleistung","Paket"],def:"Einzelleistung",col:1,hint:"Ein Paket bündelt mehrere Einzelleistungen zu einem eigenen Preis."},
       {n:"inhalt",l:"Enthaltene Leistungen",t:"multiref",ref:"preise",showIf:{f:"typ",eq:"Paket"},filter:i=>i.typ!=="Paket"&&(!cur||i.id!==cur.id)},
-      {n:"einheit",l:"Abrechnung",t:"combo",opts:()=>{const base=["pro Stunde","pro Einsatz","pro Tag","pro Woche","pauschal"];data.preise.forEach(x=>{if(x.einheit&&base.indexOf(x.einheit)<0)base.push(x.einheit)});return base},def:"pro Stunde",col:1,hint:"Aus der Liste wählen oder eine eigene Abrechnungsart eintippen. Enthält sie „Stunde“, rechnet die Buchung mit der Dauer."},
-      {n:"preis",l:"Preis ($)",t:"number",req:1,money:1,col:1},
+      {n:"einheit",l:"Abrechnung",t:"select",o:()=>LISTS.abrechnung,def:"pro Einsatz",col:1,hint:"Weitere Abrechnungsarten legt die Geschäftsführung unter System → Einstellungen an."},
+      {n:"preis",l:"Grundpreis ($)",t:"number",req:1,money:1,col:1},
+      {n:"inklStunden",l:"Im Grundpreis enthaltene Stunden",t:"number",hint:"z. B. 3. Leer lassen, wenn der Preis nicht von der Dauer abhängt."},
+      {n:"preisWeitere",l:"Preis je weitere angefangene Stunde ($)",t:"number",money:1,hint:"z. B. 750. Gilt nur zusammen mit den enthaltenen Stunden."},
       {n:"beschreibung",l:"Beschreibung",t:"textarea"}],
     extra:[{l:"Inhalt",html:d=>{
       if(d.typ!=="Paket")return esc(d.beschreibung||"");
@@ -410,7 +444,7 @@ const ENT={
       {n:"angepinnt",l:"Oben anpinnen",t:"check",lock:()=>!P.leitung,hint:"Nur Leitung und Geschäftsführung."}]},
   termine:{label:"Termine",one:"Termin",nw:"Neuer Termin",
     read:()=>true, access:()=>true,
-    canCreate:()=>P.actor,canEdit:d=>P.actor&&(d.erstelltVon===uid||P.leitung),canDelete:d=>P.actor&&(d.erstelltVon===uid||P.leitung),
+    canCreate:()=>P.actor,canEdit:d=>!d.buchung&&P.actor&&(d.erstelltVon===uid||P.leitung),canDelete:d=>!d.buchung&&P.actor&&(d.erstelltVon===uid||P.leitung),
     fields:[
       {n:"titel",l:"Titel",t:"text",req:1},
       {n:"datum",l:"Datum",t:"date",req:1},
@@ -432,12 +466,115 @@ const ENT={
 const NAV=[
   {cat:"Dashboard",items:["brett","termine"]},
   {cat:"Kontakte",items:["mitarbeiter","kunden"]},
-  {cat:"Intern",items:["vertraege","sonder","buchungen","preise"]},
+  {cat:"Intern",items:["vertraege","sonder","buchungen","preise","abrechnung"]},
   {cat:"Leitung",items:["todos"]},
-  {cat:"System",items:["backup"]}
+  {cat:"System",items:["einst","backup"]}
 ];
+ENT.abrechnung={label:"Abrechnung",page:true,read:()=>false,access:()=>P.intern,canCreate:()=>false,canEdit:()=>false,canDelete:()=>false,fields:[]};
+ENT.einst={label:"Einstellungen",page:true,read:()=>false,access:()=>P.full,canCreate:()=>false,canEdit:()=>false,canDelete:()=>false,fields:[]};
 ENT.backup={label:"Backup",page:true,read:()=>false,access:()=>P.full,canCreate:()=>false,canEdit:()=>false,canDelete:()=>false,fields:[]};
 const COLLS=Object.keys(ENT).filter(k=>!ENT[k].page);
+
+/* ---------- Einstellungen (nur GF) ---------- */
+let listsUnsub=null;
+const LIST_META={
+  raenge:{t:"Ränge ab Rang 4",d:"Geschäftsführer/in, Stellvertretung und Leitende sind fest, weil an ihnen die Rechte hängen. Die Reihenfolge hier bestimmt die Sortierung der Mitarbeiterliste. Ein Rang, den noch jemand hat, lässt sich nicht löschen."},
+  abrechnung:{t:"Abrechnungsarten",d:"Auswahl bei Preisen. Enthält der Name „Stunde“, rechnet eine Buchung ohne enthaltene Stunden mit der Stundenzahl."},
+  kundenarten:{t:"Kundenarten",d:"Auswahl „Art“ bei Kunden."},
+  sonderArten:{t:"Arten der Sondervereinbarungen",d:"Auswahl „Art“ bei Sondervereinbarungen."}
+};
+async function saveLists(next){
+  try{await setDoc(doc(db,"einstellungen","listen"),Object.assign({},next,stamp(false)));}
+  catch(e){alertBox(errText(e))}
+}
+let einstMsg="";
+function alertBox(m){einstMsg=m;render()}
+function listAction(spec){
+  if(!P.full)return;
+  const [key,act,arg]=spec.split(":"),next=JSON.parse(JSON.stringify(LISTS)),arr=next[key];
+  const i=key==="raenge"?arr.findIndex(r=>String(r.nr)===arg):parseInt(arg,10);
+  if(i<0||i>=arr.length)return;
+  if(act==="up"&&i>0){const x=arr[i];arr[i]=arr[i-1];arr[i-1]=x}
+  else if(act==="down"&&i<arr.length-1){const x=arr[i];arr[i]=arr[i+1];arr[i+1]=x}
+  else if(act==="del"){
+    if(key==="raenge"&&data.mitarbeiter.some(m=>m.rang===arr[i].nr)){alertBox("„"+arr[i].name+"“ ist noch vergeben und kann nicht gelöscht werden.");return}
+    if(arr.length<=1){alertBox("Die Liste braucht mindestens einen Eintrag.");return}
+    arr.splice(i,1);
+  }else return;
+  einstMsg="";saveLists(next);
+}
+function listRename(spec,val){
+  if(!P.full)return;
+  const [key,arg]=spec.split(":"),v=String(val||"").trim();if(!v)return;
+  const next=JSON.parse(JSON.stringify(LISTS)),arr=next[key];
+  if(key==="raenge"){const r=arr.find(x=>String(x.nr)===arg);if(!r||r.name===v)return;r.name=v}
+  else{const i=parseInt(arg,10);if(arr[i]===v)return;if(arr.indexOf(v)>-1){alertBox("„"+v+"“ gibt es schon.");return}arr[i]=v}
+  einstMsg="";saveLists(next);
+}
+function listAdd(key){
+  if(!P.full)return;
+  const el=$("#lsnew_"+key);if(!el)return;const v=el.value.trim();if(!v)return;
+  const next=JSON.parse(JSON.stringify(LISTS)),arr=next[key];
+  if(key==="raenge"){if(arr.some(r=>r.name===v)){alertBox("„"+v+"“ gibt es schon.");return}arr.push({nr:Math.max(8,...arr.map(r=>r.nr))+1,name:v})}
+  else{if(arr.indexOf(v)>-1){alertBox("„"+v+"“ gibt es schon.");return}arr.push(v)}
+  einstMsg="";saveLists(next);
+}
+function renderEinst(){
+  let h='<div class="toolbar"><h2>Einstellungen</h2></div>';
+  if(einstMsg)h+='<div class="notice">'+esc(einstMsg)+"</div>";
+  h+='<div class="stack">';
+  Object.keys(LIST_META).forEach(key=>{
+    const M=LIST_META[key],arr=LISTS[key]||[];
+    h+='<section class="post"><h3>'+esc(M.t)+'</h3><div class="sub">'+esc(M.d)+'</div><div class="stack" style="gap:6px">';
+    if(key==="raenge")TOP_RANKS.forEach((n,i)=>{h+='<div class="lsrow fixed"><span class="rk">'+(i+1)+'.</span><span style="flex:1">'+esc(n)+'</span><span class="sub">fest</span></div>'});
+    arr.forEach((it,i)=>{
+      const name=key==="raenge"?it.name:it,arg=key==="raenge"?it.nr:i;
+      const used=key==="raenge"?data.mitarbeiter.filter(m=>m.rang===it.nr).length:0;
+      h+='<div class="lsrow">'+(key==="raenge"?'<span class="rk">'+(i+4)+".</span>":"")+
+        '<input id="ls_'+key+"_"+arg+'" aria-label="Name" value="'+esc(name)+'" data-lsren="'+key+":"+arg+'">'+
+        (key==="raenge"?'<span class="sub">'+used+(used===1?" Person":" Personen")+'</span><button class="iconbtn" type="button" data-ls="'+key+":up:"+arg+'" aria-label="Nach oben"'+(i===0?" disabled":"")+'>↑</button><button class="iconbtn" type="button" data-ls="'+key+":down:"+arg+'" aria-label="Nach unten"'+(i===arr.length-1?" disabled":"")+">↓</button>":"")+
+        '<button class="iconbtn" type="button" data-ls="'+key+":del:"+arg+'" aria-label="Löschen"'+(used?" disabled title=\"Noch vergeben\"":"")+">✕</button></div>";
+    });
+    h+='<div class="lsrow"><input id="lsnew_'+key+'" placeholder="Neuer Eintrag" aria-label="Neuer Eintrag"><button class="btn small" type="button" data-lsadd="'+key+'">Hinzufügen</button></div>';
+    h+="</div></section>";
+  });
+  return h+'</div><div class="sub" style="margin-top:12px">Umbenennen: Namen ändern und das Feld verlassen. Bestehende Einträge behalten ihre alte Bezeichnung, bis man sie bearbeitet.</div>';
+}
+
+/* ---------- Abrechnung ---------- */
+let abrMonat="";
+const MONATE=["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+const monLabel=k=>{const p=k.split("-");return MONATE[+p[1]-1]+" "+p[0]};
+async function togglePaid(id,btn){
+  const b=byId("buchungen",id);if(!b||!P.intern)return;btn.disabled=true;
+  try{await updateDoc(doc(db,"buchungen",id),Object.assign({bezahlt:!b.bezahlt,bezahltAm:b.bezahlt?"":new Date().toISOString()},stamp(false)))}
+  catch(e){btn.disabled=false}
+}
+function renderAbrechnung(){
+  const all=data.buchungen;
+  const months=[...new Set(all.map(b=>String(b.datum||"").slice(0,7)).filter(Boolean))].sort().reverse();
+  const inM=b=>!abrMonat||String(b.datum||"").slice(0,7)===abrMonat;
+  const done=all.filter(b=>b.status==="Erledigt"&&inM(b));
+  const paid=done.filter(b=>b.bezahlt),open=done.filter(b=>!b.bezahlt);
+  const upcoming=all.filter(b=>b.status==="Bestätigt"&&inM(b));
+  const sum=l=>l.reduce((s,b)=>s+(Number(b.betrag)||0),0);
+  let h='<div class="toolbar"><h2>Abrechnung</h2><select id="abrM" aria-label="Zeitraum"><option value="">Alle Monate</option>'+months.map(m=>'<option value="'+m+'"'+(m===abrMonat?" selected":"")+">"+esc(monLabel(m))+"</option>").join("")+"</select></div>";
+  h+='<div class="tiles">'+
+    '<div class="tile hi"><div class="k">Gewinn (bezahlt)</div><div class="v">'+esc(money(sum(paid))||"0 $")+'</div><div class="sub">'+paid.length+(paid.length===1?" Einsatz":" Einsätze")+"</div></div>"+
+    '<div class="tile"><div class="k">Offen zur Abrechnung</div><div class="v">'+esc(money(sum(open))||"0 $")+'</div><div class="sub">'+open.length+" erledigt, nicht bezahlt</div></div>"+
+    '<div class="tile"><div class="k">Erwartet</div><div class="v">'+esc(money(sum(upcoming))||"0 $")+'</div><div class="sub">'+upcoming.length+" bestätigt, noch nicht erledigt</div></div>"+
+    '<div class="tile"><div class="k">Ø pro Einsatz</div><div class="v">'+esc(done.length?money(sum(done)/done.length):"–")+'</div><div class="sub">über alle erledigten</div></div></div>';
+  h+='<h3 class="sec">Erledigte Buchungen</h3>';
+  if(!done.length)return h+emptyBox("Noch nichts abzurechnen",!loaded.buchungen?"Lade Daten…":"Setze eine Buchung auf „Erledigt“, dann erscheint sie hier.");
+  const rows=done.slice().sort((a,b)=>(a.bezahlt?1:0)-(b.bezahlt?1:0)||String(b.datum||"").localeCompare(String(a.datum||"")));
+  const KF={t:"ref",ref:"kunden"},LF={t:"ref",ref:"preise"};
+  h+='<div class="tablebox"><table><thead><tr><th>Datum</th><th>Kunde</th><th>Leistung</th><th class="num">Betrag</th><th>Status</th><th></th></tr></thead><tbody>'+rows.map(b=>
+    '<tr data-open="buchungen:'+esc(b.id)+'"><td class="mono">'+esc(fdate(b.datum))+'</td><td class="main">'+esc(refText(KF,b.kunde))+"</td><td>"+esc(posText(b,true)||"–")+(b.aufschlag||b.rabatt?'<div class="sub">'+(b.aufschlag?"+"+esc(b.aufschlag)+" % Aufschlag":"")+(b.aufschlag&&b.rabatt?" · ":"")+(b.rabatt?"−"+esc(b.rabatt)+" % Rabatt":"")+"</div>":"")+'</td><td class="num mono">'+esc(money(b.betrag))+"</td><td>"+(b.bezahlt?'<span class="pill good">Bezahlt</span>'+(b.bezahltAm?'<div class="sub">'+esc(fstamp(b.bezahltAm))+"</div>":""):'<span class="pill warn">Offen</span>')+'</td><td><button class="btn small'+(b.bezahlt?" ghost":"")+'" type="button" data-pay="'+esc(b.id)+'">'+(b.bezahlt?"Zurücksetzen":"Als bezahlt markieren")+"</button></td></tr>").join("")+"</tbody></table></div>";
+  const byK={};paid.forEach(b=>{const n=refText(KF,b.kunde)||"Ohne Kunde";byK[n]=(byK[n]||0)+(Number(b.betrag)||0)});
+  const ks=Object.keys(byK).sort((a,b)=>byK[b]-byK[a]);
+  if(ks.length)h+='<h3 class="sec">Gewinn nach Kunde</h3><div class="tablebox"><table style="min-width:0"><tbody>'+ks.map(k=>'<tr style="cursor:default"><td class="main">'+esc(k)+'</td><td class="num mono">'+esc(money(byK[k]))+"</td></tr>").join("")+"</tbody></table></div>";
+  return h;
+}
 /* ---------- Backup (nur Geschäftsführung) ---------- */
 const bk={data:null,name:"",err:"",busy:false,armed:false,progress:"",result:"",dmsg:"",dbusy:false};
 function fileStamp(){const d=new Date(),z=n=>String(n).padStart(2,"0");return d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate())+"_"+z(d.getHours())+"-"+z(d.getMinutes())}
@@ -450,7 +587,7 @@ function renderBackup(){
   if(!bk.data){
     h+='<label class="f" for="bkFile"><span>Backup-Datei wählen</span><input type="file" id="bkFile" accept=".json,application/json"></label>';
   }else{
-    const names={mitarbeiter:"Mitarbeiter",kunden:"Kunden",vertraege:"Verträge",sonder:"Sondervereinbarungen",buchungen:"Buchungen",preise:"Preise",brett:"Aushänge",termine:"Termine",todos:"Aufgaben"};
+    const names={einstellungen:"Einstellungen",mitarbeiter:"Mitarbeiter",kunden:"Kunden",vertraege:"Verträge",sonder:"Sondervereinbarungen",buchungen:"Buchungen",preise:"Preise",brett:"Aushänge",termine:"Termine",todos:"Aufgaben"};
     h+='<div class="info-field">'+esc(bk.name)+"</div>";
     h+='<div class="sub">Erstellt am '+esc(fstamp(bk.data.exportedAt))+(bk.data.exportedBy?" von "+esc(bk.data.exportedBy):"")+"</div>";
     h+='<div class="pills">'+COLLS.filter(k=>k in cols).map(k=>'<span class="pill">'+esc(names[k]||k)+": "+Object.keys(cols[k]).length+"</span>").join("")+"</div>";
@@ -468,7 +605,7 @@ async function doExport(){
   try{
     const out={app:"blackline-verwaltung",version:1,exportedAt:new Date().toISOString(),exportedBy:me&&me.name||"",collections:{}};
     let n=0;
-    for(const k of COLLS){const snap=await getDocs(collection(db,k));out.collections[k]={};snap.forEach(d=>{out.collections[k][d.id]=d.data();n++})}
+    for(const k of COLLS.concat(["einstellungen"])){const snap=await getDocs(collection(db,k));out.collections[k]={};snap.forEach(d=>{out.collections[k][d.id]=d.data();n++})}
     const blob=new Blob([JSON.stringify(out,null,1)],{type:"application/json"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="blackline-backup_"+fileStamp()+".json";
     document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),10000);
@@ -482,7 +619,7 @@ async function readBackupFile(file){
     const obj=JSON.parse(await file.text());
     if(!obj||obj.app!=="blackline-verwaltung"||!obj.collections||typeof obj.collections!=="object")throw new Error("format");
     Object.keys(obj.collections).forEach(k=>{
-      if(COLLS.indexOf(k)<0)throw new Error("format");
+      if(COLLS.indexOf(k)<0&&k!=="einstellungen")throw new Error("format");
       const c=obj.collections[k];if(!c||typeof c!=="object"||Array.isArray(c))throw new Error("format");
       Object.keys(c).forEach(id=>{if(!c[id]||typeof c[id]!=="object"||Array.isArray(c[id])||!/^[A-Za-z0-9_-]{1,128}$/.test(id))throw new Error("format")});
     });
@@ -495,7 +632,7 @@ async function doRestore(){
   bk.busy=true;bk.armed=false;bk.err="";bk.progress="Aktuellen Stand lesen…";render();
   const cols=bk.data.collections,ops=[];
   try{
-    for(const k of COLLS){
+    for(const k of COLLS.concat(["einstellungen"])){
       if(!(k in cols))continue;
       const want=cols[k],cur=await getDocs(collection(db,k));
       cur.forEach(d=>{if(!(d.id in want)&&!(k==="mitarbeiter"&&d.id===uid))ops.push(()=>deleteDoc(doc(db,k,d.id)))});
@@ -520,13 +657,14 @@ const byId=(coll,id)=>data[coll].find(x=>x.id===id);
 function maCanon(id){if(!id||byId("mitarbeiter",id))return id;const m=data.mitarbeiter.find(x=>(x.alteIds||[]).indexOf(id)>-1);return m?m.id:id}
 const canon=(coll,id)=>coll==="mitarbeiter"?maCanon(id):id;
 const shortLabel=(coll,it)=>!it?"":coll==="preise"?(it.leistung||""):(it.name||"");
-const optLabel=(coll,it)=>coll==="preise"?(it.typ==="Paket"?"Paket: ":"")+(it.leistung||"")+" · "+money(it.preis)+" "+(it.einheit||""):shortLabel(coll,it);
+const optLabel=(coll,it)=>coll==="preise"?(it.typ==="Paket"?"Paket: ":"")+(it.leistung||"")+" · "+money(it.preis)+(Number(it.inklStunden)?" für "+it.inklStunden+" Std."+(it.preisWeitere?", +"+money(it.preisWeitere)+" je weitere":""):" "+(it.einheit||"")):shortLabel(coll,it);
 function refText(f,val){
   if(f.t==="multiref")return (val||[]).map(id=>{const it=byId(f.ref,canon(f.ref,id));return it?shortLabel(f.ref,it):"(unbekannt)"}).join(", ");
   if(!val)return "";const it=byId(f.ref,canon(f.ref,val));return it?shortLabel(f.ref,it):"(unbekannt)";
 }
 function plain(f,d){
   const v=d[f.n];
+  if(f.t==="pos")return posText(d,true);
   if(f.t==="ref"||f.t==="multiref")return refText(f,v);
   if(f.t==="rank")return rankName(v);
   if(f.t==="date")return fdate(v);
@@ -536,16 +674,21 @@ function plain(f,d){
 function cell(f,d,ek){
   const v=f.n==="typ"&&ek==="preise"?(d.typ||"Einzelleistung"):d[f.n];
   if(f.n==="status"||f.n==="art"||f.n==="typ")return v?'<span class="pill '+(TONE[v]||"")+'">'+esc(v)+"</span>":"";
-  if(f.t==="rank"){const i=rk(d);return i<99?'<span class="rk">'+(i+1)+"</span>"+esc(rankName(i)):'<span class="sub">Ohne Rang</span>'}
+  if(f.t==="rank"){const i=rk(d),ps=rankPos(i);return ps<98?'<span class="rk">'+(ps+1)+"</span>"+esc(rankName(i)):'<span class="sub">Ohne Rang</span>'}
+  if(ek==="preise"&&f.n==="preis"){const ih=Number(d.inklStunden)||0;return '<span class="mono">'+esc(money(v))+"</span>"+(ih?'<div class="sub">für '+ih+" Std."+(d.preisWeitere?" · +"+esc(money(d.preisWeitere))+" je weitere Std.":"")+"</div>":"")}
+  if(ek==="sonder"&&f.n==="rabattProzent"){const pc=pctOf(d);return pc?'<span class="pill gold">−'+esc(String(pc).replace(".",","))+" %</span>":'<span class="sub">–</span>'}
+  if(f.t==="pos"){const l=getPos(d);return l.length?l.map(x=>{const pr=byId("preise",x.leistung);return esc(pr?pr.leistung:"(unbekannt)")+(x.stunden?' <span class="sub">'+esc(x.stunden)+" Std.</span>":"")}).join("<br>"):'<span class="sub">–</span>'}
+  if(ek==="buchungen"&&f.n==="betrag")return '<span class="mono">'+esc(money(v))+"</span>"+(d.bezahlt?'<div class="sub" style="color:var(--good)">bezahlt</div>':"");
   if(f.money)return '<span class="mono">'+esc(money(v))+"</span>";
   if(f.t==="tel")return '<span class="mono">'+esc(v||"")+"</span>";
   if(f.t==="date"){
     let t=esc(fdate(v));
-    if(ek==="buchungen"&&d.uhrzeit)t+='<div class="sub mono">'+esc(d.uhrzeit)+" Uhr"+(d.dauer?" · "+esc(d.dauer)+" Std.":"")+"</div>";
+    const std=ek==="buchungen"?(Math.max(0,...getPos(d).map(x=>Number(x.stunden)||0))||null):null;
+    if(ek==="buchungen"&&(d.uhrzeit||std))t+='<div class="sub mono">'+(d.uhrzeit?esc(d.uhrzeit)+" Uhr":"")+(d.uhrzeit&&std?" · ":"")+(std?esc(std)+" Std.":"")+"</div>";
     return '<span class="mono">'+t+"</span>";
   }
   const txt=esc(plain(f,d));
-  return f===ENT[ek].fields[0]?'<span class="main">'+txt+"</span>":txt;
+  return f===ENT[ek].fields[0]||(ek==="sonder"&&f.n==="kunde")?'<span class="main">'+txt+"</span>":txt;
 }
 const neuList=()=>data.mitarbeiter.filter(m=>m.status==="Neu");
 
@@ -597,6 +740,7 @@ function renderNotices(){
   $("#whoami").innerHTML=me?"<b>"+esc(me.name||"")+"</b> · "+esc(me.status==="Neu"?"wartet auf Freischaltung":rankName(rk(me))):"";
 }
 function denied(E){
+  if(E===ENT.einst)return '<div class="denied"><strong>Kein Zugriff</strong>Die Einstellungen kann nur die Geschäftsführung ändern.</div>';
   if(E===ENT.backup)return '<div class="denied"><strong>Kein Zugriff</strong>Backups kann nur die Geschäftsführung erstellen und einspielen.</div>';
   const why=E===ENT.todos?"Die To-Do-Liste sehen nur Leitende Angestellte und die Geschäftsführung.":"Den Zugriff erteilt die Geschäftsführung in deiner Mitarbeiterakte.";
   return '<div class="denied"><strong>Kein Zugriff</strong>'+esc(why)+"</div>";
@@ -621,14 +765,26 @@ function renderTable(){
   h+='<div class="toolbar"><h2>'+esc(E.label)+"</h2>"+
     '<input type="search" id="q" placeholder="Suchen" aria-label="Suchen" value="'+esc(query)+'">'+
     (sf?'<select id="sf" aria-label="Status filtern"><option value="">Alle Status</option>'+sf.o.map(o=>"<option"+(o===statusFilter?" selected":"")+">"+esc(o)+"</option>").join("")+"</select>":"")+
-    (E.canCreate()?'<button class="btn" type="button" id="newBtn">+ '+esc(E.one)+"</button>":"")+"</div>";
-  if(!rows.length){
+    (E.canCreate()&&ek!=="sonder"?'<button class="btn" type="button" id="newBtn">+ '+esc(E.one)+"</button>":"")+"</div>";
+  if(!rows.length&&ek!=="sonder"){
     const hint=!loaded[ek]?"Lade Daten…":data[ek].length?"Passe Suche oder Filter an.":(E.canCreate()?"Lege "+E.art+" mit dem Knopf oben an.":"Sobald jemand Einträge anlegt, erscheinen sie hier.");
     return h+emptyBox(data[ek].length?"Nichts gefunden":"Noch keine Einträge",hint);
   }
   const ex=E.extra||[];
-  return h+'<div class="tablebox"><table><thead><tr>'+cols.map(f=>'<th class="'+(f.money?"num":"")+'">'+esc(f.l)+"</th>").join("")+ex.map(x=>"<th>"+esc(x.l)+"</th>").join("")+"</tr></thead><tbody>"+
-    rows.map(d=>'<tr data-open="'+ek+":"+esc(d.id)+'">'+cols.map(f=>'<td class="'+(f.money?"num":"")+'">'+cell(f,d,ek)+"</td>").join("")+ex.map(x=>"<td>"+x.html(d)+"</td>").join("")+"</tr>").join("")+"</tbody></table></div>";
+  const table=(rs,cs)=>'<div class="tablebox"><table><thead><tr>'+cs.map(f=>'<th class="'+(f.money?"num":"")+'">'+esc(f.l)+"</th>").join("")+ex.map(x=>"<th>"+esc(x.l)+"</th>").join("")+"</tr></thead><tbody>"+
+    rs.map(d=>'<tr data-open="'+ek+":"+esc(d.id)+'">'+cs.map(f=>'<td class="'+(f.money?"num":"")+'">'+cell(f,d,ek)+"</td>").join("")+ex.map(x=>"<td>"+x.html(d)+"</td>").join("")+"</tr>").join("")+"</tbody></table></div>";
+  if(ek==="sonder"){
+    const gk=rows.filter(d=>(d.richtung||R_K)===R_K),gw=rows.filter(d=>d.richtung===R_W);
+    const ck=cols.map(f=>f.n==="kunde"?Object.assign({},f,{l:"Kunde"}):f);
+    const cw=cols.filter(f=>f.n!=="rabattProzent").map(f=>f.n==="kunde"?Object.assign({},f,{l:"Partner"}):f);
+    return h+'<h3 class="sec">Vorteile für Kunden <span class="sub" style="text-transform:none;letter-spacing:0">– was wir unseren Kunden geben</span></h3>'+
+      (gk.length?table(gk,ck):emptyBox("Keine Einträge","Rabatte mit Prozentangabe werden bei Buchungen automatisch abgezogen."))+
+      (E.canCreate()?'<div style="margin-top:8px"><button class="btn ghost small" type="button" data-new="sonder:k">+ Vorteil für Kunden</button></div>':"")+
+      '<h3 class="sec">Unsere Vorteile bei Partnern <span class="sub" style="text-transform:none;letter-spacing:0">– was wir bekommen</span></h3>'+
+      (gw.length?table(gw,cw):emptyBox("Keine Einträge","Z. B. 20 % auf Essen bei einem Partner."))+
+      (E.canCreate()?'<div style="margin-top:8px"><button class="btn ghost small" type="button" data-new="sonder:w">+ Unser Vorteil</button></div>':"");
+  }
+  return h+table(rows,cols);
 }
 
 /* ---------- Schwarzes Brett ---------- */
@@ -656,7 +812,7 @@ function terminCard(d,past){
   const mine=uid&&ans[uid]?ans[uid].s:null,canAns=P.actor&&!past;
   const nm=l=>l.length?esc(l.join(", ")):"–";
   return '<article class="post termin'+(past?" past":"")+'"><div class="cal">'+(dt?'<div class="m">'+MO[dt.getMonth()]+'</div><div class="d">'+dt.getDate()+'</div><div class="w">'+WD[dt.getDay()]+"</div>":'<div class="d">?</div>')+'</div><div class="stack" style="gap:8px;min-width:0">'+
-    '<div class="post-h"><h3>'+esc(d.titel)+"</h3>"+(meIn&&!past?'<span class="pill gold">Du bist eingeteilt</span>':"")+(E.canEdit(d)?'<button class="linkbtn" type="button" data-open="termine:'+esc(d.id)+'">Bearbeiten</button>':"")+"</div>"+
+    '<div class="post-h"><h3>'+esc(d.titel)+"</h3>"+(d.buchung?'<span class="pill">Aus Buchung</span>':"")+(meIn&&!past?'<span class="pill gold">Du bist eingeteilt</span>':"")+(d.buchung&&P.intern&&byId("buchungen",d.buchung)?'<button class="linkbtn" type="button" data-open="buchungen:'+esc(d.buchung)+'">Buchung öffnen</button>':"")+(E.canEdit(d)?'<button class="linkbtn" type="button" data-open="termine:'+esc(d.id)+'">Bearbeiten</button>':"")+"</div>"+
     '<div class="meta"><span class="mono">'+esc(fdate(d.datum))+(d.uhrzeit?" · "+esc(d.uhrzeit)+" Uhr":"")+"</span>"+(d.ort?"<span>"+esc(d.ort)+"</span>":"")+"<span>von "+esc(d.erstelltName||"Unbekannt")+"</span></div>"+
     (d.beschreibung?'<div class="body">'+esc(d.beschreibung)+"</div>":"")+
     '<div class="answers">'+(einget.length?'<div style="grid-column:1/-1"><div class="k of">Eingeteilt ('+einget.length+")</div>"+einget.map(x=>esc(x.name)+' <span class="k '+(x.st==="zu"?"zu":x.st==="ab"?"ab":"of")+'">'+LAB[x.st]+"</span>").join(" · ")+"</div>":"")+'<div><div class="k zu">Zusagen ('+zu.length+")</div>"+nm(zu)+'</div><div><div class="k ab">Absagen ('+ab.length+")</div>"+nm(ab)+"</div>"+(showOffen?'<div><div class="k of">Noch offen ('+offen.length+")</div>"+nm(offen)+"</div>":"")+"</div>"+
@@ -696,10 +852,84 @@ function render(){
     if(!uid)return;
     computePerms();
     renderNav();renderNotices();
-    const E=ENT[tab],keep=document.activeElement&&document.activeElement.id==="q";
-    $("#view").innerHTML=!E.access()?denied(E):tab==="brett"?renderBrett():tab==="termine"?renderTermine():tab==="todos"?renderTodos():tab==="backup"?renderBackup():renderTable();
-    if(keep){const el=$("#q");if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length)}}
+    const E=ENT[tab],ae=document.activeElement;
+    const keepId=ae&&ae.id&&ae.tagName==="INPUT"&&(ae.type==="text"||ae.type==="search")&&$("#view").contains(ae)?ae.id:null,keepVal=keepId?ae.value:"";
+    $("#view").innerHTML=!E.access()?denied(E):tab==="brett"?renderBrett():tab==="termine"?renderTermine():tab==="todos"?renderTodos():tab==="backup"?renderBackup():tab==="einst"?renderEinst():tab==="abrechnung"?renderAbrechnung():renderTable();
+    if(keepId){const el=document.getElementById(keepId);if(el){el.value=keepVal;el.focus();try{el.setSelectionRange(keepVal.length,keepVal.length)}catch(e){}}}
   });
+}
+
+/* ---------- Preisberechnung ---------- */
+/* ---------- Sondervereinbarungen & Rabatt ---------- */
+const pctOf=s=>{if(Number(s.rabattProzent))return Number(s.rabattProzent);if(!/rabatt/i.test(s.art||""))return 0;const m=String(s.wert||"").match(/(\d+(?:[.,]\d+)?)\s*%/);return m?parseFloat(m[1].replace(",",".")):0};
+function kundenRabatt(kid,datum){
+  const hits=data.sonder.filter(s=>s.kunde===kid&&(s.richtung||R_K)===R_K&&(s.status||"Aktiv")==="Aktiv"&&(!s.gueltigBis||!datum||s.gueltigBis>=datum))
+    .map(s=>({s,p:pctOf(s)})).filter(x=>x.p>0);
+  return {p:Math.min(100,hits.reduce((a,x)=>a+x.p,0)),names:hits.map(x=>(x.s.art||"Rabatt")+" "+String(x.p).replace(".",",")+" %"+(x.s.gueltigBis?" (bis "+fdate(x.s.gueltigBis)+")":""))};
+}
+/* Positionen einer Buchung; alte Buchungen mit nur einer Leistung werden als eine Position gelesen */
+function getPos(b){
+  if(Array.isArray(b.positionen))return b.positionen;
+  if(!b.leistung)return [];
+  const st=b.stunden!=null?b.stunden:(b.dauer?Math.ceil(num(b.dauer)||0)||null:null);
+  return [{leistung:b.leistung,stunden:st}];
+}
+function posText(b,withHours){
+  return getPos(b).map(x=>{const pr=byId("preise",x.leistung);return (pr?pr.leistung:"(unbekannt)")+(withHours&&x.stunden?" ("+x.stunden+" Std.)":"")}).join(", ");
+}
+function calcAll(list,auf,rab){
+  const rows=list.filter(x=>x.leistung&&byId("preise",x.leistung));
+  if(!rows.length)return null;
+  let sum=0;const lines=[];
+  rows.forEach(x=>{const pr=byId("preise",x.leistung),c=calcBetrag(pr,x.stunden,0);sum+=c.sum;lines.push(pr.leistung+": "+c.text)});
+  const a=Number(auf)||0,r=Math.min(100,Math.max(0,Number(rab)||0));
+  const z=a?Math.round(sum*a)/100:0,rz=r?Math.round(sum*r)/100:0;
+  const total=Math.round((sum+z-rz)*100)/100;
+  if(rows.length>1||a||r){
+    let t=rows.length>1||(!a&&!r)?"Zwischensumme "+money(sum):money(sum);
+    if(a)t+=" + "+String(a).replace(".",",")+" % Aufschlag ("+money(z)+")";
+    if(r)t+=" − "+String(r).replace(".",",")+" % Rabatt ("+money(rz)+")";
+    lines.push(t+" = "+money(total));
+  }
+  return {sum:total,lines};
+}
+function calcBetrag(p,std,auf){
+  if(!p)return null;
+  const base=Number(p.preis)||0,inkl=Number(p.inklStunden)||0,w=Number(p.preisWeitere)||0,h=Math.max(0,Number(std)||0);
+  let sum=base;const parts=[];
+  if(inkl>0){
+    parts.push(money(base)+" für "+inkl+" Std.");
+    const extra=Math.max(0,Math.ceil(h-inkl));
+    if(extra>0){sum+=extra*w;parts.push(extra+" × "+money(w)+" je weitere Std.")}
+  }else if(/stunde/i.test(p.einheit||"")){
+    const hh=Math.max(1,Math.ceil(h||1));sum=base*hh;parts.push(hh+" Std. × "+money(base));
+  }else parts.push(money(base)+" "+(p.einheit||""));
+  const a=Number(auf)||0;
+  if(a){const z=Math.round(sum*a)/100;parts.push(String(a).replace(".",",")+" % Aufschlag ("+money(z)+")");sum+=z}
+  sum=Math.round(sum*100)/100;
+  return {sum,text:parts.join(" + ")+" = "+money(sum)};
+}
+/* ---------- Bestätigte Buchung → Termin ---------- */
+async function syncTermin(bid,b){
+  const tid="b_"+bid,ref=doc(db,"termine",tid),ex=byId("termine",tid);
+  const want=b&&(b.status==="Bestätigt"||b.status==="Erledigt");
+  if(!want){if(ex)await deleteDoc(ref);return}
+  const k=byId("kunden",b.kunde),lt=posText(b,false),hrs=getPos(b).map(x=>Number(x.stunden)||0),mx=Math.max(0,...hrs),nm={};
+  (b.mitarbeiter||[]).forEach(id=>{const m=byId("mitarbeiter",maCanon(id));nm[id]=m&&m.name||""});
+  const f={titel:"Einsatz: "+(k?k.name:"Kunde")+(lt?" – "+lt:""),datum:b.datum||"",uhrzeit:b.uhrzeit||"",ort:b.ort||"",
+    teilnehmer:b.mitarbeiter||[],teilnehmerNamen:nm,buchung:bid,beschreibung:mx?"Dauer bis zu "+mx+(mx===1?" Stunde":" Stunden"):""};
+  if(ex)await updateDoc(ref,Object.assign(f,stamp(false)));
+  else await setDoc(ref,Object.assign(f,stamp(true)));
+}
+
+function posRowHTML(x,dis){
+  const items=data.preise.slice().sort(ENT.preise.sort),cv=x.stunden==null?"":Number(x.stunden);
+  let hs='<option value="">Std.</option>';for(let i=1;i<=24;i++)hs+='<option value="'+i+'"'+(i===cv?" selected":"")+">"+i+" Std.</option>";
+  return '<div class="posrow"><select class="pos-l" aria-label="Leistung"'+(dis||"")+'><option value="">– Leistung wählen –</option>'+items.map(i=>'<option value="'+esc(i.id)+'"'+(i.id===x.leistung?" selected":"")+">"+esc((i.typ==="Paket"?"Paket: ":"")+(i.leistung||""))+"</option>").join("")+'</select><select class="pos-h" aria-label="Stunden"'+(dis||"")+">"+hs+'</select><span class="pos-p"></span>'+(dis?"":'<button class="iconbtn" type="button" data-posdel aria-label="Leistung entfernen">✕</button>')+"</div>";
+}
+function readPos(){
+  const box=$("#f_positionen");if(!box)return [];
+  return Array.prototype.map.call(box.querySelectorAll(".posrow"),r=>({leistung:r.querySelector(".pos-l").value,stunden:r.querySelector(".pos-h").value?parseInt(r.querySelector(".pos-h").value,10):null}));
 }
 
 /* ---------- Formular ---------- */
@@ -715,13 +945,20 @@ function fieldHTML(f,val,d){
   if(f.t==="check")return '<label class="f check" for="'+id+'"><input type="checkbox" id="'+id+'"'+(val?" checked":"")+dis+"><span>"+esc(f.l)+(f.hint?'<br><span class="hint">'+esc(f.hint)+"</span>":"")+"</span></label>";
   let inp="";
   if(f.t==="textarea")inp='<textarea id="'+id+'" rows="'+(f.rows||3)+'"'+dis+">"+esc(val)+"</textarea>";
+  else if(f.t==="pos"){
+    const list=(val&&val.length)?val:[{leistung:"",stunden:null}];
+    inp='<div class="posbox" id="'+id+'">'+list.map(x=>posRowHTML(x,dis)).join("")+'</div>'+(dis?"":'<button class="btn ghost small" type="button" data-posadd style="align-self:flex-start">+ Weitere Leistung</button>');
+    const tag2="div";
+    return "<"+tag2+' class="f"><span>'+esc(f.l)+"</span>"+inp+'<span class="hint">Jede Leistung mit eigener Stundenzahl. Der Betrag wird zusammengerechnet.</span></'+tag2+">";
+  }
+  else if(f.t==="hours"){const cv=val==null||val===""?"":Number(val);let o='<option value="">–</option>';for(let i=1;i<=24;i++)o+='<option value="'+i+'"'+(i===cv?" selected":"")+">"+i+(i===1?" Stunde":" Stunden")+"</option>";if(cv&&cv>24)o+='<option value="'+cv+'" selected>'+cv+" Stunden</option>";inp='<select id="'+id+'"'+dis+">"+o+"</select>"}
   else if(f.t==="combo")inp='<input id="'+id+'" list="dl_'+f.n+'" value="'+esc(val)+'"'+dis+'><datalist id="dl_'+f.n+'">'+f.opts().map(o=>'<option value="'+esc(o)+'"></option>').join("")+"</datalist>";
   else if(f.t==="rank"){
     const min=P.full?0:3,cv=typeof val==="number"?val:99;
-    let opts=RANKS.map((r,i)=>({i,r})).filter(o=>o.i>=min||o.i===cv);
-    inp='<select id="'+id+'"'+dis+">"+(cv===99?'<option value="99" selected>– kein Rang –</option>':"")+opts.map(o=>'<option value="'+o.i+'"'+(o.i===cv?" selected":"")+">"+(o.i+1)+". "+esc(o.r)+"</option>").join("")+"</select>";
+    const opts=rankList().filter(o=>o.nr>=min||o.nr===cv);
+    inp='<select id="'+id+'"'+dis+">"+(cv===99||!opts.some(o=>o.nr===cv)?'<option value="'+cv+'" selected>– kein Rang –</option>':"")+opts.map(o=>'<option value="'+o.nr+'"'+(o.nr===cv?" selected":"")+">"+(rankPos(o.nr)+1)+". "+esc(o.name)+"</option>").join("")+"</select>";
   }else if(f.t==="select"){
-    const opts=f.o.slice();if(val&&opts.indexOf(val)<0)opts.push(val);
+    const opts=(typeof f.o==="function"?f.o():f.o).slice();if(val&&opts.indexOf(val)<0)opts.push(val);
     inp='<select id="'+id+'"'+dis+">"+opts.map(o=>"<option"+(o===val?" selected":"")+' value="'+esc(o)+'">'+esc(o)+"</option>").join("")+"</select>";
   }else if(f.t==="ref"){
     const items=data[f.ref].slice().sort(ENT[f.ref].sort),cv=canon(f.ref,val);
@@ -736,7 +973,7 @@ function fieldHTML(f,val,d){
   const tag=f.t==="multiref"?"div":"label";
   return "<"+tag+' class="f"'+(tag==="label"?' for="'+id+'"':"")+"><span>"+esc(f.l)+req+"</span>"+inp+hint+"</"+tag+">";
 }
-function openForm(ek,id,linkId){
+function openForm(ek,id,linkId,preset){
   const E=ENT[ek],d=id?byId(ek,id):null;
   if(id&&!d)return;
   if(!d&&!E.canCreate())return;
@@ -747,6 +984,8 @@ function openForm(ek,id,linkId){
   $("#sheetTitle").textContent=freischalten?"Mitglied freischalten":d?(ed?E.one+" bearbeiten":E.one):E.nw;
   const vals=Object.assign({},d||{});
   if(!d)E.fields.forEach(f=>{if(f.n&&vals[f.n]==null&&f.def!=null)vals[f.n]=f.def});
+  if(!d&&preset)Object.assign(vals,preset);
+  if(ek==="buchungen"&&d)vals.positionen=getPos(d);
   cur.vals=vals;
   let h="",inGroup=false;
   if(freischalten){
@@ -754,7 +993,7 @@ function openForm(ek,id,linkId){
     const old=linkId?byId("mitarbeiter",linkId):null;
     if(old){["name","rang","telefon","eintritt","notiz","zKontakte","zIntern"].forEach(k=>{if(old[k]!=null)vals[k]=old[k]});cur.link=old.id}
     if(!P.full){vals.zKontakte=false;vals.zIntern=false}
-    vals.status="Aktiv";if(rk(vals)===99)vals.rang=5;
+    vals.status="Aktiv";if(rankPos(rk(vals))>=98)vals.rang=(LISTS.raenge.find(r=>r.name==="Security Mitarbeiter")||LISTS.raenge[LISTS.raenge.length-1]||{nr:99}).nr;
     h+='<div class="notice info"><div>Wähle Rang und bei Bedarf Rechte, dann „Freischalten“. Danach kann <b>'+esc(d.name)+'</b> die Seite nutzen.</div></div>';
     if(cands.length)h+='<label class="f" for="f_link"><span>Schon als Mitarbeiter angelegt?</span><select id="f_link"><option value="">Nein, als neuen Mitarbeiter freischalten</option>'+cands.map(m=>'<option value="'+esc(m.id)+'"'+(old&&old.id===m.id?" selected":"")+">Verbinden mit: "+esc(m.name||"")+" ("+esc(rankName(rk(m)))+")</option>").join("")+'</select><span class="hint">Dann werden Rang, Telefon, Notizen und alle Einteilungen aus dem bestehenden Eintrag übernommen, und der doppelte Eintrag verschwindet.'+(P.full?"":" Rechte für Kontakte und Intern vergibt danach die Geschäftsführung.")+"</span></label>";
   }
@@ -762,6 +1001,8 @@ function openForm(ek,id,linkId){
   E.fields.forEach(f=>{
     if(f.group){if(inGroup)h+="</div>";h+=fieldHTML(f);inGroup=true;return}
     h+=fieldHTML(f,vals[f.n],d||{});
+    if(ek==="buchungen"&&f.n==="rabatt")h+='<div class="calcinfo" id="rabattInfo" hidden></div>';
+    if(ek==="buchungen"&&f.n==="betrag")h+='<div class="calcinfo" id="calcInfo">Wähle eine Leistung, dann wird der Betrag berechnet.</div>';
   });
   if(inGroup)h+="</div>";
   h+='<div class="err" id="err" role="alert" hidden></div>';
@@ -781,16 +1022,38 @@ function openForm(ek,id,linkId){
     const upd=()=>{w.hidden=src.value!==w.dataset.eq};src.addEventListener("change",upd);upd();
   });
   if(ek==="buchungen"&&ed){
-    const calc=()=>{
-      if(cur.betragManual)return;
-      const p=byId("preise",$("#f_leistung").value);if(!p)return;
-      const dauer=num($("#f_dauer").value),base=Number(p.preis)||0;let out=null;
-      if(/stunde/i.test(p.einheit||"")){if(dauer)out=base*dauer}else out=base;
-      if(out!=null)$("#f_betrag").value=String(Math.round(out*100)/100).replace(".",",");
+    const read=()=>calcAll(readPos(),num($("#f_aufschlag").value),num($("#f_rabatt").value));
+    const rabInfo=(apply)=>{
+      const kid=$("#f_kunde").value,info=$("#rabattInfo");
+      if(!kid){info.hidden=true;return}
+      const kr=kundenRabatt(kid,$("#f_datum").value);
+      if(apply)$("#f_rabatt").value=kr.p?String(kr.p).replace(".",","):"";
+      const curV=num($("#f_rabatt").value)||0;
+      info.hidden=false;
+      info.innerHTML=kr.names.length?"Sondervereinbarung: "+esc(kr.names.join(", "))+(Math.abs(curV-kr.p)>0.001?' · <button class="linkbtn" type="button" id="rabApply">'+esc(String(kr.p).replace(".",","))+" % übernehmen</button>":""):"Keine aktive Rabatt-Vereinbarung für diesen Kunden.";
     };
-    $("#f_leistung").addEventListener("change",calc);
-    $("#f_dauer").addEventListener("input",calc);
-    $("#f_betrag").addEventListener("input",()=>{cur.betragManual=true});
+    cur.rabInfo=rabInfo;
+    const c0=read();
+    cur.betragManual=!!(d&&d.betrag!=null&&(!c0||Math.abs(c0.sum-Number(d.betrag))>0.009));
+    const calc=()=>{
+      $("#f_positionen").querySelectorAll(".posrow").forEach(r=>{
+        const pr=byId("preise",r.querySelector(".pos-l").value),h=r.querySelector(".pos-h").value;
+        r.querySelector(".pos-p").textContent=pr?money(calcBetrag(pr,h,0).sum):"";
+      });
+      const c=read(),info=$("#calcInfo");
+      if(!c){info.textContent="Wähle mindestens eine Leistung, dann wird der Betrag berechnet.";return}
+      if(!cur.betragManual)$("#f_betrag").value=String(c.sum).replace(".",",");
+      info.innerHTML=c.lines.map(esc).join("<br>")+(cur.betragManual?'<br><b>Betrag von Hand geändert</b> <button class="linkbtn" type="button" id="recalc">neu berechnen</button>':"");
+    };
+    cur.calc=calc;
+    $("#f_positionen").addEventListener("change",calc);
+    $("#f_aufschlag").addEventListener("input",calc);
+    $("#f_rabatt").addEventListener("input",()=>{rabInfo(false);calc()});
+    $("#f_kunde").addEventListener("change",()=>{rabInfo(true);calc()});
+    $("#f_datum").addEventListener("change",()=>{rabInfo(!d);calc()});
+    rabInfo(false);
+    $("#f_betrag").addEventListener("input",()=>{if(!cur.betragManual){cur.betragManual=true;calc()}});
+    calc();
   }
   const first=$("#form").querySelector("input:not(:disabled),select:not(:disabled),textarea:not(:disabled)");if(first&&!d)first.focus();
 }
@@ -806,6 +1069,8 @@ function collect(E,d){
     else if(f.t==="check")out[f.n]=el.checked;
     else if(f.t==="number")out[f.n]=num(el.value);
     else if(f.t==="rank")out[f.n]=parseInt(el.value,10);
+    else if(f.t==="hours")out[f.n]=el.value?parseInt(el.value,10):null;
+    else if(f.t==="pos")out[f.n]=readPos().filter(x=>x.leistung);
     else out[f.n]=el.value.trim();
   });
   return out;
@@ -862,8 +1127,12 @@ $("#form").addEventListener("submit",async ev=>{
   if(cur.ek==="termine"&&body.teilnehmer){const nm={};body.teilnehmer.forEach(id=>{const m=byId("mitarbeiter",id);nm[id]=m&&m.name||""});body.teilnehmerNamen=nm}
   saving=true;$("#saveBtn").disabled=true;
   try{
+    if(cur.ek==="buchungen"&&body.positionen){const pl=body.positionen;body.leistung=pl[0]?pl[0].leistung:"";const mx=Math.max(0,...pl.map(x=>Number(x.stunden)||0));body.stunden=mx||null}
+    if(cur.ek==="buchungen"&&body.bezahlt&&!(cur.d&&cur.d.bezahlt))body.bezahltAm=new Date().toISOString();
+    let savedId=cur.id;
     if(cur.id)await updateDoc(doc(db,cur.ek,cur.id),Object.assign(body,stamp(false)));
-    else await addDoc(collection(db,cur.ek),Object.assign(body,stamp(true)));
+    else savedId=(await addDoc(collection(db,cur.ek),Object.assign(body,stamp(true)))).id;
+    if(cur.ek==="buchungen"){try{await syncTermin(savedId,Object.assign({},cur.d||{},body))}catch(e){console.error(e)}}
     closeForm();
   }catch(e){showErr(errText(e));$("#saveBtn").disabled=false}
   finally{saving=false}
@@ -879,11 +1148,23 @@ document.addEventListener("click",async ev=>{
   if(t.id==="delBtn"){
     if(!t.classList.contains("armed")){t.classList.add("armed");t.textContent="Wirklich löschen?";setTimeout(()=>{if(t.isConnected){t.classList.remove("armed");t.textContent="Löschen"}},4000);return}
     if(saving||!cur)return;saving=true;
-    try{await deleteDoc(doc(db,cur.ek,cur.id));closeForm()}
+    try{
+      await deleteDoc(doc(db,cur.ek,cur.id));
+      if(cur.ek==="buchungen"&&byId("termine","b_"+cur.id)){try{await deleteDoc(doc(db,"termine","b_"+cur.id))}catch(e){}}
+      closeForm();
+    }
     catch(e){showErr(errText(e))}finally{saving=false}
     return;
   }
   if(t.id==="newBtn"){openForm(tab);return}
+  const nb=t.closest("[data-new]");if(nb){const q=nb.dataset.new.split(":");openForm(q[0],null,null,q[0]==="sonder"?{richtung:q[1]==="w"?R_W:R_K}:null);return}
+  if(t.closest("[data-posadd]")&&cur){const box=$("#f_positionen");box.insertAdjacentHTML("beforeend",posRowHTML({leistung:"",stunden:null},""));if(cur.calc)cur.calc();box.lastElementChild.querySelector(".pos-l").focus();return}
+  if(t.closest("[data-posdel]")&&cur){const box=$("#f_positionen"),row=t.closest(".posrow");if(box.children.length>1)row.remove();else{row.querySelector(".pos-l").value="";row.querySelector(".pos-h").value=""}if(cur.calc)cur.calc();return}
+  if(t.id==="rabApply"&&cur&&cur.rabInfo){cur.rabInfo(true);cur.calc();return}
+  if(t.id==="recalc"&&cur&&cur.calc){cur.betragManual=false;cur.calc();return}
+  const ls=t.closest("[data-ls]");if(ls){listAction(ls.dataset.ls);return}
+  const la=t.closest("[data-lsadd]");if(la){listAdd(la.dataset.lsadd);return}
+  const pay=t.closest("[data-pay]");if(pay){togglePaid(pay.dataset.pay,pay);return}
   if(t.id==="bkDown"){doExport();return}
   if(t.id==="bkReset"){bk.data=null;bk.name="";bk.err="";bk.result="";bk.progress="";bk.armed=false;render();return}
   if(t.id==="bkRestore"){
@@ -906,6 +1187,8 @@ document.addEventListener("click",async ev=>{
 });
 document.addEventListener("change",async ev=>{
   const t=ev.target;
+  if(t.dataset&&t.dataset.lsren){listRename(t.dataset.lsren,t.value);return}
+  if(t.id==="abrM"){abrMonat=t.value;render();return}
   if(t.id==="f_link"&&cur){openForm(cur.ek,cur.id,t.value||null);return}
   if(t.id==="bkFile"){if(t.files&&t.files[0])readBackupFile(t.files[0]);return}
   if(t.id==="sf"){statusFilter=t.value;render();return}
@@ -918,7 +1201,8 @@ document.addEventListener("change",async ev=>{
   }
 });
 document.addEventListener("input",ev=>{if(ev.target.id==="q"){query=ev.target.value;render()}});
-document.addEventListener("keydown",ev=>{if(ev.key==="Escape"&&!$("#scrim").hidden)closeForm()});
+document.addEventListener("keydown",ev=>{
+  if(ev.key==="Enter"&&ev.target.id&&ev.target.id.indexOf("lsnew_")===0){ev.preventDefault();listAdd(ev.target.id.slice(6));return}if(ev.key==="Escape"&&!$("#scrim").hidden)closeForm()});
 
 /* ---------- Anmelden & Registrieren ---------- */
 let authMode="login";
@@ -987,6 +1271,7 @@ async function ensureOwnDoc(user){
 let meUnsub=null;
 onAuthStateChanged(auth,user=>{
   if(meUnsub){meUnsub();meUnsub=null}
+  if(listsUnsub){listsUnsub();listsUnsub=null}
   COLLS.forEach(k=>{if(subs[k]){subs[k]();subs[k]=null}data[k]=[];loaded[k]=false});
   closeForm();
   if(!user){
@@ -998,6 +1283,11 @@ onAuthStateChanged(auth,user=>{
   uid=user.uid;
   $("#authScreen").hidden=true;$("#appScreen").hidden=false;
   try{const s=localStorage.getItem("bl-tab");if(s&&ENT[s])tab=s}catch(e){}
+  listsUnsub=onSnapshot(doc(db,"einstellungen","listen"),snap=>{
+    const d=snap.exists()?snap.data():{};
+    LISTS={};Object.keys(DEFAULT_LISTS).forEach(k=>{LISTS[k]=Array.isArray(d[k])&&d[k].length?d[k]:JSON.parse(JSON.stringify(DEFAULT_LISTS[k]))});
+    render();
+  },()=>{});
   meUnsub=onSnapshot(doc(db,"mitarbeiter",uid),{includeMetadataChanges:true},snap=>{
     me=snap.exists()?Object.assign({},snap.data(),{id:snap.id}):null;
     meLoaded=true;
