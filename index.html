@@ -261,7 +261,7 @@ const firebaseConfig = {
 
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getAuth,onAuthStateChanged,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,updateProfile} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {getFirestore,collection,doc,onSnapshot,addDoc,updateDoc,deleteDoc,setDoc,getDoc,writeBatch} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,collection,doc,onSnapshot,addDoc,updateDoc,deleteDoc,setDoc,getDoc,getDocs,writeBatch} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const LOGIN_DOMAIN="blackline-rp.example.com";
 
@@ -425,9 +425,83 @@ const NAV=[
   {cat:"Dashboard",items:["brett","termine"]},
   {cat:"Kontakte",items:["mitarbeiter","kunden"]},
   {cat:"Intern",items:["vertraege","sonder","buchungen","preise"]},
-  {cat:"Leitung",items:["todos"]}
+  {cat:"Leitung",items:["todos"]},
+  {cat:"System",items:["backup"]}
 ];
-const COLLS=Object.keys(ENT);
+ENT.backup={label:"Backup",page:true,read:()=>false,access:()=>P.full,canCreate:()=>false,canEdit:()=>false,canDelete:()=>false,fields:[]};
+const COLLS=Object.keys(ENT).filter(k=>!ENT[k].page);
+/* ---------- Backup (nur Geschäftsführung) ---------- */
+const bk={data:null,name:"",err:"",busy:false,armed:false,progress:"",result:"",dmsg:"",dbusy:false};
+function fileStamp(){const d=new Date(),z=n=>String(n).padStart(2,"0");return d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate())+"_"+z(d.getHours())+"-"+z(d.getMinutes())}
+function renderBackup(){
+  const cols=bk.data?bk.data.collections:null;
+  let h='<div class="toolbar"><h2>Backup</h2></div><div class="stack">';
+  h+='<section class="post"><h3>Backup herunterladen</h3><div class="body">Speichert alle Daten der Verwaltung als Datei auf diesem Gerät: Mitarbeiter, Kunden, Verträge, Sondervereinbarungen, Buchungen, Preise, Schwarzes Brett, Termine und To-Dos. Am besten einmal pro Woche und vor größeren Änderungen.</div>'+
+     '<div class="rsvp"><button class="btn" type="button" id="bkDown"'+(bk.dbusy?" disabled":"")+'>Backup herunterladen</button>'+(bk.dmsg?'<span class="sub">'+esc(bk.dmsg)+"</span>":"")+"</div></section>";
+  h+='<section class="post"><h3>Backup einspielen</h3><div class="body">Setzt alle Daten auf den Stand der Datei zurück. Einträge, die es im Backup nicht gibt, werden gelöscht. Wer sich seitdem neu registriert hat, erscheint beim nächsten Anmelden wieder als neue Registrierung. Deine eigene Akte bleibt unverändert.</div>';
+  if(!bk.data){
+    h+='<label class="f" for="bkFile"><span>Backup-Datei wählen</span><input type="file" id="bkFile" accept=".json,application/json"></label>';
+  }else{
+    const names={mitarbeiter:"Mitarbeiter",kunden:"Kunden",vertraege:"Verträge",sonder:"Sondervereinbarungen",buchungen:"Buchungen",preise:"Preise",brett:"Aushänge",termine:"Termine",todos:"Aufgaben"};
+    h+='<div class="info-field">'+esc(bk.name)+"</div>";
+    h+='<div class="sub">Erstellt am '+esc(fstamp(bk.data.exportedAt))+(bk.data.exportedBy?" von "+esc(bk.data.exportedBy):"")+"</div>";
+    h+='<div class="pills">'+COLLS.filter(k=>k in cols).map(k=>'<span class="pill">'+esc(names[k]||k)+": "+Object.keys(cols[k]).length+"</span>").join("")+"</div>";
+    if(!bk.busy&&!bk.result)h+='<div class="rsvp"><button class="btn'+(bk.armed?" danger armed":"")+'" type="button" id="bkRestore">'+(bk.armed?"Wirklich alles ersetzen?":"Jetzt einspielen")+'</button><button class="btn ghost" type="button" id="bkReset">Andere Datei</button></div>';
+    if(bk.result)h+='<div class="rsvp"><button class="btn ghost" type="button" id="bkReset">Fertig</button></div>';
+  }
+  if(bk.progress)h+='<div class="sub">'+esc(bk.progress)+"</div>";
+  if(bk.result)h+='<div class="notice info"><div>'+esc(bk.result)+"</div></div>";
+  if(bk.err)h+='<div class="err">'+esc(bk.err)+"</div>";
+  return h+"</section></div>";
+}
+async function doExport(){
+  if(!P.full||bk.dbusy)return;
+  bk.dbusy=true;bk.dmsg="Wird erstellt…";render();
+  try{
+    const out={app:"blackline-verwaltung",version:1,exportedAt:new Date().toISOString(),exportedBy:me&&me.name||"",collections:{}};
+    let n=0;
+    for(const k of COLLS){const snap=await getDocs(collection(db,k));out.collections[k]={};snap.forEach(d=>{out.collections[k][d.id]=d.data();n++})}
+    const blob=new Blob([JSON.stringify(out,null,1)],{type:"application/json"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="blackline-backup_"+fileStamp()+".json";
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),10000);
+    bk.dmsg="Heruntergeladen: "+n+" Einträge.";
+  }catch(e){bk.dmsg="Backup hat nicht geklappt: "+errText(e)}
+  finally{bk.dbusy=false;render()}
+}
+async function readBackupFile(file){
+  bk.err="";bk.result="";bk.progress="";bk.armed=false;
+  try{
+    const obj=JSON.parse(await file.text());
+    if(!obj||obj.app!=="blackline-verwaltung"||!obj.collections||typeof obj.collections!=="object")throw new Error("format");
+    Object.keys(obj.collections).forEach(k=>{
+      if(COLLS.indexOf(k)<0)throw new Error("format");
+      const c=obj.collections[k];if(!c||typeof c!=="object"||Array.isArray(c))throw new Error("format");
+      Object.keys(c).forEach(id=>{if(!c[id]||typeof c[id]!=="object"||Array.isArray(c[id])||!/^[A-Za-z0-9_-]{1,128}$/.test(id))throw new Error("format")});
+    });
+    bk.data=obj;bk.name=file.name;
+  }catch(e){bk.data=null;bk.err="Diese Datei ist kein Backup dieser Verwaltung."}
+  render();
+}
+async function doRestore(){
+  if(!P.full||!bk.data||bk.busy)return;
+  bk.busy=true;bk.armed=false;bk.err="";bk.progress="Aktuellen Stand lesen…";render();
+  const cols=bk.data.collections,ops=[];
+  try{
+    for(const k of COLLS){
+      if(!(k in cols))continue;
+      const want=cols[k],cur=await getDocs(collection(db,k));
+      cur.forEach(d=>{if(!(d.id in want)&&!(k==="mitarbeiter"&&d.id===uid))ops.push(()=>deleteDoc(doc(db,k,d.id)))});
+      Object.keys(want).forEach(id=>{if(k==="mitarbeiter"&&id===uid)return;ops.push(()=>setDoc(doc(db,k,id),want[id]))});
+    }
+  }catch(e){bk.busy=false;bk.progress="";bk.err="Konnte den aktuellen Stand nicht lesen: "+errText(e);render();return}
+  let done=0,fail=0,i=0;
+  const worker=async()=>{while(i<ops.length){const op=ops[i++];try{await op()}catch(e){fail++}done++;if(done%10===0||done===ops.length){bk.progress="Eingespielt: "+done+" von "+ops.length;render()}}};
+  await Promise.all([worker(),worker(),worker(),worker()]);
+  bk.busy=false;bk.progress="";
+  bk.result=fail?("Fertig, aber "+fail+" von "+ops.length+" Änderungen wurden abgelehnt. Prüfe, ob die neuen Datenbank-Regeln veröffentlicht sind, und spiele das Backup erneut ein."):("Backup eingespielt: "+ops.length+" Änderungen.");
+  render();
+}
+
 
 const data={},loaded={},subs={},retries={};
 COLLS.forEach(k=>{data[k]=[];loaded[k]=false;subs[k]=null});
@@ -489,8 +563,8 @@ function renderNav(){
     const allLocked=c.items.every(k=>!ENT[k].access());
     return '<div class="cat"><div class="cat-h">'+esc(c.cat)+(allLocked?LOCK:"")+"</div>"+c.items.map(k=>{
       const E=ENT[k],ok=E.access();
-      let cnt=ok?'<span class="count">'+data[k].length+"</span>":LOCK;
-      if(k==="brett"&&ok)cnt="";
+      let cnt=!ok?LOCK:E.page?"":'<span class="count">'+data[k].length+"</span>";
+      if((k==="brett"||E.page)&&ok)cnt="";
       if(k==="termine"&&ok)cnt='<span class="count">'+data.termine.filter(t=>(t.datum||"")>=todayStr()).length+"</span>";
       if(k==="todos"&&ok)cnt='<span class="count">'+data.todos.filter(t=>!t.erledigt).length+"</span>";
       if(k==="mitarbeiter"&&ok&&P.leitung&&neuList().length)cnt='<span class="count hot">'+neuList().length+" neu</span>";
@@ -512,6 +586,7 @@ function renderNotices(){
   $("#whoami").innerHTML=me?"<b>"+esc(me.name||"")+"</b> · "+esc(me.status==="Neu"?"wartet auf Freischaltung":rankName(rk(me))):"";
 }
 function denied(E){
+  if(E===ENT.backup)return '<div class="denied"><strong>Kein Zugriff</strong>Backups kann nur die Geschäftsführung erstellen und einspielen.</div>';
   const why=E===ENT.todos?"Die To-Do-Liste sehen nur Leitende Angestellte und die Geschäftsführung.":"Den Zugriff erteilt die Geschäftsführung in deiner Mitarbeiterakte.";
   return '<div class="denied"><strong>Kein Zugriff</strong>'+esc(why)+"</div>";
 }
@@ -606,7 +681,7 @@ function render(){
     computePerms();
     renderNav();renderNotices();
     const E=ENT[tab],keep=document.activeElement&&document.activeElement.id==="q";
-    $("#view").innerHTML=!E.access()?denied(E):tab==="brett"?renderBrett():tab==="termine"?renderTermine():tab==="todos"?renderTodos():renderTable();
+    $("#view").innerHTML=!E.access()?denied(E):tab==="brett"?renderBrett():tab==="termine"?renderTermine():tab==="todos"?renderTodos():tab==="backup"?renderBackup():renderTable();
     if(keep){const el=$("#q");if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length)}}
   });
 }
@@ -756,6 +831,12 @@ document.addEventListener("click",async ev=>{
     return;
   }
   if(t.id==="newBtn"){openForm(tab);return}
+  if(t.id==="bkDown"){doExport();return}
+  if(t.id==="bkReset"){bk.data=null;bk.name="";bk.err="";bk.result="";bk.progress="";bk.armed=false;render();return}
+  if(t.id==="bkRestore"){
+    if(!bk.armed){bk.armed=true;render();setTimeout(()=>{if(bk.armed){bk.armed=false;render()}},5000);return}
+    doRestore();return;
+  }
   const rs=t.closest("[data-rsvp]");
   if(rs){
     if(!uid||!me||saving)return;
@@ -772,6 +853,7 @@ document.addEventListener("click",async ev=>{
 });
 document.addEventListener("change",async ev=>{
   const t=ev.target;
+  if(t.id==="bkFile"){if(t.files&&t.files[0])readBackupFile(t.files[0]);return}
   if(t.id==="sf"){statusFilter=t.value;render();return}
   if(t.id==="tf"){todoFilter=t.value;render();return}
   if(t.dataset&&t.dataset.toggle){
