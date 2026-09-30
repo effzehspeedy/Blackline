@@ -294,7 +294,7 @@ const db=getFirestore(fbApp);
 const RANKS=["Geschäftsführer/in","Stellvertretende/r Geschäftsführer/in","Leitende/r Angestellte/r","Sicherheitsberater","Personenschutz","Security Mitarbeiter","Ausbildung","Fahrer","Privatermittler"];
 const rk=d=>(d&&typeof d.rang==="number")?d.rang:99;
 const rankName=i=>RANKS[i]||"Ohne Rang";
-const TONE={"Aktiv":"good","Bestätigt":"good","Erledigt":"good","Angefragt":"warn","Interessent":"warn","Entwurf":"warn","Urlaub":"warn","Pausiert":"warn","Neu":"warn","Hoch":"bad","Abgesagt":"bad","Gekündigt":"bad","Gesperrt":"bad","Beendet":"bad","Ausgelaufen":"bad","Ausgetreten":"bad","Widerrufen":"bad","Abgelaufen":"bad"};
+const TONE={"Paket":"gold","Aktiv":"good","Bestätigt":"good","Erledigt":"good","Angefragt":"warn","Interessent":"warn","Entwurf":"warn","Urlaub":"warn","Pausiert":"warn","Neu":"warn","Hoch":"bad","Abgesagt":"bad","Gekündigt":"bad","Gesperrt":"bad","Beendet":"bad","Ausgelaufen":"bad","Ausgetreten":"bad","Widerrufen":"bad","Abgelaufen":"bad"};
 
 let uid=null,me=null,meLoaded=false;
 const P={full:false,leitung:false,kontakte:false,intern:false,todo:false,actor:false};
@@ -313,7 +313,7 @@ const canEditMA=d=>P.full||(P.leitung&&rk(d)>=3);
 const ENT={
   mitarbeiter:{label:"Mitarbeiter",one:"Mitarbeiter",nw:"Neuer Mitarbeiter",art:"den ersten Mitarbeiter",
     read:()=>P.kontakte||P.intern||P.leitung, access:()=>P.kontakte||P.leitung,
-    canCreate:()=>P.leitung, canEdit:d=>canEditMA(d)||P.kontakte, canDelete:d=>P.full&&d.id!==uid,
+    canCreate:()=>P.leitung, canEdit:d=>canEditMA(d)||P.kontakte, canDelete:d=>d.id!==uid&&(P.full||(P.leitung&&!d.login&&rk(d)>=3)),
     sort:(a,b)=>rk(a)-rk(b)||String(a.name||"").localeCompare(String(b.name||""),"de"),
     fields:[
       {n:"name",l:"IC-Name",t:"text",req:1,col:1},
@@ -361,9 +361,8 @@ const ENT={
   sonder:{label:"Sondervereinbarungen",one:"Sondervereinbarung",nw:"Neue Sondervereinbarung",art:"die erste Sondervereinbarung",
     read:()=>P.intern, access:()=>P.intern,
     canCreate:()=>P.intern,canEdit:()=>P.intern,canDelete:()=>P.intern,
-    sort:(a,b)=>String(a.titel||"").localeCompare(String(b.titel||""),"de"),
+    sort:(a,b)=>refText({t:"ref",ref:"kunden"},a.kunde).localeCompare(refText({t:"ref",ref:"kunden"},b.kunde),"de")||String(a.art||"").localeCompare(String(b.art||""),"de"),
     fields:[
-      {n:"titel",l:"Titel",t:"text",req:1,col:1},
       {n:"kunde",l:"Kunde",t:"ref",ref:"kunden",req:1,col:1},
       {n:"art",l:"Art",t:"select",o:["Rabatt","Sonderpreis","Freileistung","Sonstiges"],def:"Rabatt",col:1},
       {n:"wert",l:"Wert",t:"text",col:1,hint:"z. B. 20 % oder 500 $ pro Einsatz"},
@@ -388,12 +387,20 @@ const ENT={
   preise:{label:"Preise",one:"Leistung",nw:"Neue Leistung",art:"die erste Leistung",
     read:()=>P.intern, access:()=>P.intern,
     canCreate:()=>P.intern,canEdit:()=>P.intern,canDelete:()=>P.intern,
-    sort:(a,b)=>String(a.leistung||"").localeCompare(String(b.leistung||""),"de"),
+    sort:(a,b)=>(a.typ==="Paket"?1:0)-(b.typ==="Paket"?1:0)||String(a.leistung||"").localeCompare(String(b.leistung||""),"de"),
     fields:[
-      {n:"leistung",l:"Leistung",t:"text",req:1,col:1},
-      {n:"einheit",l:"Abrechnung",t:"select",o:["pro Stunde","pro Einsatz","pro Tag","pauschal"],def:"pro Stunde",col:1},
+      {n:"leistung",l:"Name",t:"text",req:1,col:1},
+      {n:"typ",l:"Typ",t:"select",o:["Einzelleistung","Paket"],def:"Einzelleistung",col:1,hint:"Ein Paket bündelt mehrere Einzelleistungen zu einem eigenen Preis."},
+      {n:"inhalt",l:"Enthaltene Leistungen",t:"multiref",ref:"preise",showIf:{f:"typ",eq:"Paket"},filter:i=>i.typ!=="Paket"&&(!cur||i.id!==cur.id)},
+      {n:"einheit",l:"Abrechnung",t:"combo",opts:()=>{const base=["pro Stunde","pro Einsatz","pro Tag","pro Woche","pauschal"];data.preise.forEach(x=>{if(x.einheit&&base.indexOf(x.einheit)<0)base.push(x.einheit)});return base},def:"pro Stunde",col:1,hint:"Aus der Liste wählen oder eine eigene Abrechnungsart eintippen. Enthält sie „Stunde“, rechnet die Buchung mit der Dauer."},
       {n:"preis",l:"Preis ($)",t:"number",req:1,money:1,col:1},
-      {n:"beschreibung",l:"Beschreibung",t:"textarea",col:1}]},
+      {n:"beschreibung",l:"Beschreibung",t:"textarea"}],
+    extra:[{l:"Inhalt",html:d=>{
+      if(d.typ!=="Paket")return esc(d.beschreibung||"");
+      const items=(d.inhalt||[]).map(id=>byId("preise",id)).filter(Boolean);
+      const sum=items.reduce((s,x)=>s+(Number(x.preis)||0),0),save=sum-(Number(d.preis)||0);
+      return esc(items.map(x=>x.leistung).join(", ")||"Noch leer")+'<div class="sub">Einzelpreise zusammen '+esc(money(sum)||"0 $")+(save>0?' · <span style="white-space:nowrap">Ersparnis '+esc(money(save))+"</span>":"")+"</div>";
+    }}]},
   brett:{label:"Schwarzes Brett",one:"Aushang",nw:"Neuer Aushang",
     read:()=>true, access:()=>true,
     canCreate:()=>P.actor,canEdit:d=>P.actor&&(d.erstelltVon===uid||P.leitung),canDelete:d=>P.actor&&(d.erstelltVon===uid||P.leitung),
@@ -409,6 +416,7 @@ const ENT={
       {n:"datum",l:"Datum",t:"date",req:1},
       {n:"uhrzeit",l:"Uhrzeit",t:"time"},
       {n:"ort",l:"Treffpunkt",t:"text"},
+      {n:"teilnehmer",l:"Eingeteilte Mitarbeiter",t:"multiref",ref:"mitarbeiter",lock:()=>!ENT.mitarbeiter.read(),hideLocked:1,filter:m=>m.status!=="Ausgetreten"&&m.status!=="Neu",hint:"Leer lassen, wenn der Termin für alle gilt. Mitarbeiter ohne Login lassen sich auch einteilen."},
       {n:"beschreibung",l:"Beschreibung",t:"textarea"}]},
   todos:{label:"To-Do",one:"Aufgabe",nw:"Neue Aufgabe",
     read:()=>P.todo, access:()=>P.todo,
@@ -508,11 +516,14 @@ COLLS.forEach(k=>{data[k]=[];loaded[k]=false;subs[k]=null});
 let tab="brett",query="",statusFilter="",todoFilter="offen";
 
 const byId=(coll,id)=>data[coll].find(x=>x.id===id);
+/* Mitarbeiter, die sich nachträglich registriert haben, behalten ihre alte ID als Alias */
+function maCanon(id){if(!id||byId("mitarbeiter",id))return id;const m=data.mitarbeiter.find(x=>(x.alteIds||[]).indexOf(id)>-1);return m?m.id:id}
+const canon=(coll,id)=>coll==="mitarbeiter"?maCanon(id):id;
 const shortLabel=(coll,it)=>!it?"":coll==="preise"?(it.leistung||""):(it.name||"");
-const optLabel=(coll,it)=>coll==="preise"?(it.leistung||"")+" · "+money(it.preis)+" "+(it.einheit||""):shortLabel(coll,it);
+const optLabel=(coll,it)=>coll==="preise"?(it.typ==="Paket"?"Paket: ":"")+(it.leistung||"")+" · "+money(it.preis)+" "+(it.einheit||""):shortLabel(coll,it);
 function refText(f,val){
-  if(f.t==="multiref")return (val||[]).map(id=>{const it=byId(f.ref,id);return it?shortLabel(f.ref,it):"(unbekannt)"}).join(", ");
-  if(!val)return "";const it=byId(f.ref,val);return it?shortLabel(f.ref,it):"(unbekannt)";
+  if(f.t==="multiref")return (val||[]).map(id=>{const it=byId(f.ref,canon(f.ref,id));return it?shortLabel(f.ref,it):"(unbekannt)"}).join(", ");
+  if(!val)return "";const it=byId(f.ref,canon(f.ref,val));return it?shortLabel(f.ref,it):"(unbekannt)";
 }
 function plain(f,d){
   const v=d[f.n];
@@ -523,8 +534,8 @@ function plain(f,d){
   return v==null?"":String(v);
 }
 function cell(f,d,ek){
-  const v=d[f.n];
-  if(f.n==="status"||f.n==="art")return v?'<span class="pill '+(TONE[v]||"")+'">'+esc(v)+"</span>":"";
+  const v=f.n==="typ"&&ek==="preise"?(d.typ||"Einzelleistung"):d[f.n];
+  if(f.n==="status"||f.n==="art"||f.n==="typ")return v?'<span class="pill '+(TONE[v]||"")+'">'+esc(v)+"</span>":"";
   if(f.t==="rank"){const i=rk(d);return i<99?'<span class="rk">'+(i+1)+"</span>"+esc(rankName(i)):'<span class="sub">Ohne Rang</span>'}
   if(f.money)return '<span class="mono">'+esc(money(v))+"</span>";
   if(f.t==="tel")return '<span class="mono">'+esc(v||"")+"</span>";
@@ -604,7 +615,7 @@ function renderTable(){
   });
   let h="";
   if(ek==="mitarbeiter"&&P.leitung&&neuList().length){
-    h+='<div class="newbox"><h3>Neue Registrierungen</h3>'+neuList().sort((a,b)=>String(a.erstelltAt||"").localeCompare(String(b.erstelltAt||""))).map(m=>
+    h+='<div class="newbox"><h3>Neue Registrierungen</h3><div class="sub">Ist die Person schon als Mitarbeiter ohne Login angelegt, wähle beim Freischalten „Verbinden mit“. Dann bleiben ihre Daten und Einteilungen erhalten.</div>'+neuList().sort((a,b)=>String(a.erstelltAt||"").localeCompare(String(b.erstelltAt||""))).map(m=>
       '<div class="newrow"><div><div class="main">'+esc(m.name)+'</div><div class="sub">Login: '+esc(m.login||"")+" · registriert am "+esc(fstamp(m.erstelltAt))+'</div></div><button class="btn small" type="button" data-open="mitarbeiter:'+esc(m.id)+'">Freischalten</button></div>').join("")+"</div>";
   }
   h+='<div class="toolbar"><h2>'+esc(E.label)+"</h2>"+
@@ -635,15 +646,20 @@ function terminCard(d,past){
   const E=ENT.termine,p=String(d.datum||"").split("-"),dt=p.length===3?new Date(+p[0],+p[1]-1,+p[2]):null;
   const ans=d.antworten||{},zu=[],ab=[];
   Object.keys(ans).forEach(k=>{const a=ans[k]||{};if(a.s==="zu")zu.push(a.n||"?");else if(a.s==="ab")ab.push(a.n||"?")});
-  const showOffen=!past&&loaded.mitarbeiter;
+  const tl=d.teilnehmer||[];
+  const showOffen=!past&&loaded.mitarbeiter&&!tl.length;
+  const LAB={zu:"zugesagt",ab:"abgesagt",of:"offen",nl:"ohne Login"};
+  const einget=tl.map(pid=>{const cid=maCanon(pid),m=byId("mitarbeiter",cid),a=ans[cid]||ans[pid];
+    return {name:(m&&m.name)||(d.teilnehmerNamen||{})[pid]||(d.teilnehmerNamen||{})[cid]||"?",st:a?(a.s==="zu"?"zu":"ab"):(m&&!m.login?"nl":"of"),me:cid===uid}});
+  const meIn=einget.some(x=>x.me);
   const offen=showOffen?data.mitarbeiter.filter(m=>m.login&&(m.status==="Aktiv"||m.status==="Urlaub")&&!ans[m.id]).map(m=>m.name||""):[];
   const mine=uid&&ans[uid]?ans[uid].s:null,canAns=P.actor&&!past;
   const nm=l=>l.length?esc(l.join(", ")):"–";
   return '<article class="post termin'+(past?" past":"")+'"><div class="cal">'+(dt?'<div class="m">'+MO[dt.getMonth()]+'</div><div class="d">'+dt.getDate()+'</div><div class="w">'+WD[dt.getDay()]+"</div>":'<div class="d">?</div>')+'</div><div class="stack" style="gap:8px;min-width:0">'+
-    '<div class="post-h"><h3>'+esc(d.titel)+"</h3>"+(E.canEdit(d)?'<button class="linkbtn" type="button" data-open="termine:'+esc(d.id)+'">Bearbeiten</button>':"")+"</div>"+
+    '<div class="post-h"><h3>'+esc(d.titel)+"</h3>"+(meIn&&!past?'<span class="pill gold">Du bist eingeteilt</span>':"")+(E.canEdit(d)?'<button class="linkbtn" type="button" data-open="termine:'+esc(d.id)+'">Bearbeiten</button>':"")+"</div>"+
     '<div class="meta"><span class="mono">'+esc(fdate(d.datum))+(d.uhrzeit?" · "+esc(d.uhrzeit)+" Uhr":"")+"</span>"+(d.ort?"<span>"+esc(d.ort)+"</span>":"")+"<span>von "+esc(d.erstelltName||"Unbekannt")+"</span></div>"+
     (d.beschreibung?'<div class="body">'+esc(d.beschreibung)+"</div>":"")+
-    '<div class="answers"><div><div class="k zu">Zusagen ('+zu.length+")</div>"+nm(zu)+'</div><div><div class="k ab">Absagen ('+ab.length+")</div>"+nm(ab)+"</div>"+(showOffen?'<div><div class="k of">Noch offen ('+offen.length+")</div>"+nm(offen)+"</div>":"")+"</div>"+
+    '<div class="answers">'+(einget.length?'<div style="grid-column:1/-1"><div class="k of">Eingeteilt ('+einget.length+")</div>"+einget.map(x=>esc(x.name)+' <span class="k '+(x.st==="zu"?"zu":x.st==="ab"?"ab":"of")+'">'+LAB[x.st]+"</span>").join(" · ")+"</div>":"")+'<div><div class="k zu">Zusagen ('+zu.length+")</div>"+nm(zu)+'</div><div><div class="k ab">Absagen ('+ab.length+")</div>"+nm(ab)+"</div>"+(showOffen?'<div><div class="k of">Noch offen ('+offen.length+")</div>"+nm(offen)+"</div>":"")+"</div>"+
     (canAns?'<div class="rsvp"><button type="button" class="btn ghost small'+(mine==="zu"?" on-zu":"")+'" data-rsvp="'+esc(d.id)+':zu" aria-pressed="'+(mine==="zu")+'">Zusagen</button><button type="button" class="btn ghost small'+(mine==="ab"?" on-ab":"")+'" data-rsvp="'+esc(d.id)+':ab" aria-pressed="'+(mine==="ab")+'">Absagen</button>'+(mine?'<span class="sub">Du hast '+(mine==="zu"?"zugesagt":"abgesagt")+".</span>":"")+"</div>":"")+
     "</div></article>";
 }
@@ -691,12 +707,15 @@ let cur=null;
 const isLocked=(f,d)=>!!(f.lock&&f.lock(d||{}));
 function fieldHTML(f,val,d){
   if(f.group)return '<div class="group"><div class="group-h">'+esc(f.group)+'</div><span class="hint sub">'+esc(f.hint||"")+"</span>";
+  if(f.hideLocked&&isLocked(f,d))return "";
+  if(f.showIf){const inner=fieldHTML(Object.assign({},f,{showIf:null}),val,d);const on=String((cur&&cur.vals&&cur.vals[f.showIf.f])||"")===f.showIf.eq;return '<div data-showif="'+f.showIf.f+'" data-eq="'+esc(f.showIf.eq)+'"'+(on?"":" hidden")+">"+inner+"</div>"}
   const id="f_"+f.n,req=f.req?' <span class="req">*</span>':"",dis=isLocked(f,d)?" disabled":"";
   const hint=f.hint?'<span class="hint">'+esc(f.hint)+"</span>":"";
   if(f.t==="info"){if(!val)return "";return '<div class="f"><span>'+esc(f.l)+'</span><div class="info-field">'+esc(val)+"</div>"+hint+"</div>"}
   if(f.t==="check")return '<label class="f check" for="'+id+'"><input type="checkbox" id="'+id+'"'+(val?" checked":"")+dis+"><span>"+esc(f.l)+(f.hint?'<br><span class="hint">'+esc(f.hint)+"</span>":"")+"</span></label>";
   let inp="";
   if(f.t==="textarea")inp='<textarea id="'+id+'" rows="'+(f.rows||3)+'"'+dis+">"+esc(val)+"</textarea>";
+  else if(f.t==="combo")inp='<input id="'+id+'" list="dl_'+f.n+'" value="'+esc(val)+'"'+dis+'><datalist id="dl_'+f.n+'">'+f.opts().map(o=>'<option value="'+esc(o)+'"></option>').join("")+"</datalist>";
   else if(f.t==="rank"){
     const min=P.full?0:3,cv=typeof val==="number"?val:99;
     let opts=RANKS.map((r,i)=>({i,r})).filter(o=>o.i>=min||o.i===cv);
@@ -705,18 +724,19 @@ function fieldHTML(f,val,d){
     const opts=f.o.slice();if(val&&opts.indexOf(val)<0)opts.push(val);
     inp='<select id="'+id+'"'+dis+">"+opts.map(o=>"<option"+(o===val?" selected":"")+' value="'+esc(o)+'">'+esc(o)+"</option>").join("")+"</select>";
   }else if(f.t==="ref"){
-    const items=data[f.ref].slice().sort(ENT[f.ref].sort);
-    inp='<select id="'+id+'"'+dis+'><option value="">– wählen –</option>'+items.map(i=>'<option value="'+esc(i.id)+'"'+(i.id===val?" selected":"")+">"+esc(optLabel(f.ref,i))+"</option>").join("")+"</select>";
+    const items=data[f.ref].slice().sort(ENT[f.ref].sort),cv=canon(f.ref,val);
+    inp='<select id="'+id+'"'+dis+'><option value="">– wählen –</option>'+items.map(i=>'<option value="'+esc(i.id)+'"'+(i.id===cv?" selected":"")+">"+esc(optLabel(f.ref,i))+"</option>").join("")+"</select>";
     if(!items.length)inp+='<span class="hint">Hier gibt es noch nichts zur Auswahl. Lege den Eintrag zuerst unter „'+esc(ENT[f.ref].label)+'“ an.</span>';
   }else if(f.t==="multiref"){
-    const its=data[f.ref].slice().sort(ENT[f.ref].sort),sel=val||[];
+    const sel=(val||[]).map(x=>canon(f.ref,x));
+    const its=data[f.ref].filter(i=>!f.filter||f.filter(i)||sel.indexOf(i.id)>-1).sort(ENT[f.ref].sort);
     inp='<div class="chips" id="'+id+'">'+(its.length?its.map(i=>'<label><input type="checkbox" value="'+esc(i.id)+'"'+(sel.indexOf(i.id)>-1?" checked":"")+dis+">"+esc(shortLabel(f.ref,i))+"</label>").join(""):'<span class="hint">Noch keine '+esc(ENT[f.ref].label)+" angelegt.</span>")+"</div>";
   }else if(f.t==="number")inp='<input id="'+id+'" type="text" inputmode="decimal" value="'+esc(val==null?"":String(val).replace(".",","))+'"'+dis+">";
   else inp='<input id="'+id+'" type="'+(f.t==="date"?"date":f.t==="time"?"time":f.t==="tel"?"tel":"text")+'" value="'+esc(val)+'"'+dis+">";
   const tag=f.t==="multiref"?"div":"label";
   return "<"+tag+' class="f"'+(tag==="label"?' for="'+id+'"':"")+"><span>"+esc(f.l)+req+"</span>"+inp+hint+"</"+tag+">";
 }
-function openForm(ek,id){
+function openForm(ek,id,linkId){
   const E=ENT[ek],d=id?byId(ek,id):null;
   if(id&&!d)return;
   if(!d&&!E.canCreate())return;
@@ -726,13 +746,22 @@ function openForm(ek,id){
   cur={ek,id:id||null,d,betragManual:!!(d&&d.betrag!=null&&d.betrag!==""),ro:!ed};
   $("#sheetTitle").textContent=freischalten?"Mitglied freischalten":d?(ed?E.one+" bearbeiten":E.one):E.nw;
   const vals=Object.assign({},d||{});
-  if(freischalten){vals.status="Aktiv";if(rk(vals)===99)vals.rang=5}
+  if(!d)E.fields.forEach(f=>{if(f.n&&vals[f.n]==null&&f.def!=null)vals[f.n]=f.def});
+  cur.vals=vals;
   let h="",inGroup=false;
-  if(freischalten)h+='<div class="notice info"><div>Wähle Rang und bei Bedarf Rechte, dann „Freischalten“. Danach kann <b>'+esc(d.name)+'</b> die Seite nutzen.</div></div>';
+  if(freischalten){
+    const cands=data.mitarbeiter.filter(m=>!m.login&&m.id!==d.id&&(P.full||rk(m)>=3)).sort(ENT.mitarbeiter.sort);
+    const old=linkId?byId("mitarbeiter",linkId):null;
+    if(old){["name","rang","telefon","eintritt","notiz","zKontakte","zIntern"].forEach(k=>{if(old[k]!=null)vals[k]=old[k]});cur.link=old.id}
+    if(!P.full){vals.zKontakte=false;vals.zIntern=false}
+    vals.status="Aktiv";if(rk(vals)===99)vals.rang=5;
+    h+='<div class="notice info"><div>Wähle Rang und bei Bedarf Rechte, dann „Freischalten“. Danach kann <b>'+esc(d.name)+'</b> die Seite nutzen.</div></div>';
+    if(cands.length)h+='<label class="f" for="f_link"><span>Schon als Mitarbeiter angelegt?</span><select id="f_link"><option value="">Nein, als neuen Mitarbeiter freischalten</option>'+cands.map(m=>'<option value="'+esc(m.id)+'"'+(old&&old.id===m.id?" selected":"")+">Verbinden mit: "+esc(m.name||"")+" ("+esc(rankName(rk(m)))+")</option>").join("")+'</select><span class="hint">Dann werden Rang, Telefon, Notizen und alle Einteilungen aus dem bestehenden Eintrag übernommen, und der doppelte Eintrag verschwindet.'+(P.full?"":" Rechte für Kontakte und Intern vergibt danach die Geschäftsführung.")+"</span></label>";
+  }
+  if(!d&&ek==="mitarbeiter")h+='<div class="notice info"><div>Der Mitarbeiter wird ohne Login angelegt und kann trotzdem Terminen und Buchungen zugeteilt werden. Registriert er sich später, verbindest du ihn beim Freischalten mit diesem Eintrag.</div></div>';
   E.fields.forEach(f=>{
     if(f.group){if(inGroup)h+="</div>";h+=fieldHTML(f);inGroup=true;return}
-    let v=vals[f.n];if(v==null&&f.def!=null&&!d)v=f.def;
-    h+=fieldHTML(f,v,d||{});
+    h+=fieldHTML(f,vals[f.n],d||{});
   });
   if(inGroup)h+="</div>";
   h+='<div class="err" id="err" role="alert" hidden></div>';
@@ -747,12 +776,16 @@ function openForm(ek,id){
   $("#form").innerHTML=h;
   if(!ed)Array.prototype.forEach.call($("#form").elements,el=>{if(el.id!=="cancelBtn")el.disabled=true});
   $("#scrim").hidden=false;
+  $("#form").querySelectorAll("[data-showif]").forEach(w=>{
+    const src=$("#f_"+w.dataset.showif);if(!src)return;
+    const upd=()=>{w.hidden=src.value!==w.dataset.eq};src.addEventListener("change",upd);upd();
+  });
   if(ek==="buchungen"&&ed){
     const calc=()=>{
       if(cur.betragManual)return;
       const p=byId("preise",$("#f_leistung").value);if(!p)return;
       const dauer=num($("#f_dauer").value),base=Number(p.preis)||0;let out=null;
-      if(p.einheit==="pro Stunde"){if(dauer)out=base*dauer}else out=base;
+      if(/stunde/i.test(p.einheit||"")){if(dauer)out=base*dauer}else out=base;
       if(out!=null)$("#f_betrag").value=String(Math.round(out*100)/100).replace(".",",");
     };
     $("#f_leistung").addEventListener("change",calc);
@@ -767,6 +800,8 @@ function collect(E,d){
   E.fields.forEach(f=>{
     if(f.group||f.t==="info"||isLocked(f,d))return;
     const el=$("#f_"+f.n);if(!el)return;
+    const wrap=el.closest("[data-showif]");
+    if(wrap&&wrap.hidden){if(f.t==="multiref")out[f.n]=[];return}
     if(f.t==="multiref")out[f.n]=Array.prototype.map.call(el.querySelectorAll("input:checked"),c=>c.value);
     else if(f.t==="check")out[f.n]=el.checked;
     else if(f.t==="number")out[f.n]=num(el.value);
@@ -806,7 +841,25 @@ $("#form").addEventListener("submit",async ev=>{
   for(const f of E.fields){
     if(f.req&&!isLocked(f,cur.d||{})&&(body[f.n]===""||body[f.n]==null)){showErr(f.l+" fehlt.");$("#f_"+f.n).focus();return}
   }
+  if(cur.link){
+    const old=byId("mitarbeiter",cur.link),d=cur.d;
+    if(!old){showErr("Der gewählte Eintrag existiert nicht mehr.");return}
+    const merged=Object.assign({},old,body,{login:d.login,alteIds:(old.alteIds||[]).concat([old.id]),erstelltAt:d.erstelltAt||"",erstelltVon:d.erstelltVon||d.id,erstelltName:d.erstelltName||d.name||""},stamp(false));
+    delete merged.id;
+    if(!P.full){merged.zKontakte=false;merged.zIntern=false}
+    saving=true;$("#saveBtn").disabled=true;
+    try{
+      const b=writeBatch(db);
+      b.set(doc(db,"mitarbeiter",d.id),merged);
+      b.delete(doc(db,"mitarbeiter",old.id));
+      data.termine.forEach(t=>{const tl=t.teilnehmer||[];if(tl.indexOf(old.id)>-1)b.update(doc(db,"termine",t.id),{teilnehmer:tl.map(x=>x===old.id?d.id:x),["teilnehmerNamen."+d.id]:merged.name||""})});
+      await b.commit();closeForm();
+    }catch(e){showErr(errText(e));$("#saveBtn").disabled=false}
+    finally{saving=false}
+    return;
+  }
   if(cur.id&&cur.ek==="mitarbeiter")body=onlyChanged(body,cur.d);
+  if(cur.ek==="termine"&&body.teilnehmer){const nm={};body.teilnehmer.forEach(id=>{const m=byId("mitarbeiter",id);nm[id]=m&&m.name||""});body.teilnehmerNamen=nm}
   saving=true;$("#saveBtn").disabled=true;
   try{
     if(cur.id)await updateDoc(doc(db,cur.ek,cur.id),Object.assign(body,stamp(false)));
@@ -853,6 +906,7 @@ document.addEventListener("click",async ev=>{
 });
 document.addEventListener("change",async ev=>{
   const t=ev.target;
+  if(t.id==="f_link"&&cur){openForm(cur.ek,cur.id,t.value||null);return}
   if(t.id==="bkFile"){if(t.files&&t.files[0])readBackupFile(t.files[0]);return}
   if(t.id==="sf"){statusFilter=t.value;render();return}
   if(t.id==="tf"){todoFilter=t.value;render();return}
