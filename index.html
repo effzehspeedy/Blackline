@@ -429,7 +429,7 @@ const NAV=[
 ];
 const COLLS=Object.keys(ENT);
 
-const data={},loaded={},subs={};
+const data={},loaded={},subs={},retries={};
 COLLS.forEach(k=>{data[k]=[];loaded[k]=false;subs[k]=null});
 let tab="brett",query="",statusFilter="",todoFilter="offen";
 
@@ -470,9 +470,15 @@ function syncSubs(){
     const want=!!uid&&ENT[k].read();
     if(want&&!subs[k]){
       subs[k]=onSnapshot(collection(db,k),snap=>{
+        retries[k]=0;
         data[k]=snap.docs.map(d=>Object.assign({},d.data(),{id:d.id}));
         loaded[k]=true;render();
-      },()=>{if(subs[k]){subs[k]();subs[k]=null}data[k]=[];loaded[k]=true;render()});
+      },()=>{
+        if(subs[k]){subs[k]();subs[k]=null}
+        data[k]=[];loaded[k]=true;render();
+        /* abgelehnt, z. B. weil die eigene Akte gerade erst gespeichert wird: kurz warten und neu versuchen */
+        if((retries[k]||0)<5){retries[k]=(retries[k]||0)+1;setTimeout(()=>{if(uid)syncSubs()},1500*retries[k])}
+      });
     }else if(!want&&subs[k]){subs[k]();subs[k]=null;data[k]=[];loaded[k]=false}
   });
 }
@@ -856,13 +862,16 @@ onAuthStateChanged(auth,user=>{
   uid=user.uid;
   $("#authScreen").hidden=true;$("#appScreen").hidden=false;
   try{const s=localStorage.getItem("bl-tab");if(s&&ENT[s])tab=s}catch(e){}
-  meUnsub=onSnapshot(doc(db,"mitarbeiter",uid),snap=>{
+  meUnsub=onSnapshot(doc(db,"mitarbeiter",uid),{includeMetadataChanges:true},snap=>{
     me=snap.exists()?Object.assign({},snap.data(),{id:snap.id}):null;
     meLoaded=true;
     if(!me&&!snap.metadata.fromCache)ensureOwnDoc(user);
     $("#live").classList.toggle("on",!snap.metadata.fromCache);
     $("#liveText").textContent=snap.metadata.fromCache?"Offline":"Live";
-    computePerms();syncSubs();render();
+    computePerms();
+    /* erst abonnieren, wenn die eigene Akte wirklich auf dem Server liegt */
+    if(!snap.metadata.hasPendingWrites)syncSubs();
+    render();
   },()=>{$("#liveText").textContent="Getrennt"});
   render();
 });
