@@ -235,6 +235,8 @@ img{max-width:100%}
 .foot-total span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .foot-total b{font-family:var(--f-display);font-size:26px;color:var(--accent)}
 @media (max-width:520px){.pc-grid{grid-template-columns:1fr}}
+.namerow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:420px){.namerow{grid-template-columns:1fr}}
 .calcinfo{font-size:12px;color:var(--muted);background:var(--raise);border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin-top:-6px}
 .calcinfo b{color:var(--accent)}
 .info-field{background:var(--field);border:1px dashed var(--line);border-radius:6px;padding:9px 10px;font-family:var(--f-mono);font-weight:400;font-size:13px}
@@ -257,7 +259,7 @@ img{max-width:100%}
       <button type="button" role="tab" id="tabReg" aria-selected="false">Registrieren</button>
     </div>
     <form id="authForm" autocomplete="on">
-      <label class="f" for="aName"><span>IC-Name</span><input id="aName" autocomplete="username" maxlength="40" required></label>
+      <div class="namerow"><label class="f" for="aVor"><span>Vorname</span><input id="aVor" autocomplete="given-name" maxlength="25" required></label><label class="f" for="aNach"><span>Nachname</span><input id="aNach" autocomplete="family-name" maxlength="25"></label></div>
       <label class="f" for="aPass"><span>Passwort</span><input id="aPass" type="password" autocomplete="current-password" minlength="6" required></label>
       <label class="f" for="aPass2" id="pass2Wrap" hidden><span>Passwort wiederholen</span><input id="aPass2" type="password" autocomplete="new-password" minlength="6"></label>
       <div class="err" id="authErr" role="alert" hidden></div>
@@ -391,8 +393,9 @@ const ENT={
     canCreate:()=>P.leitung, canEdit:d=>canEditMA(d)||P.kontakte, canDelete:d=>d.id!==uid&&(P.full||(P.leitung&&!d.login&&rk(d)>=3)),
     sort:(a,b)=>rankPos(rk(a))-rankPos(rk(b))||String(a.name||"").localeCompare(String(b.name||""),"de"),
     fields:[
-      {n:"name",l:"IC-Name",t:"text",req:1,col:1},
-      {n:"login",l:"Login-Name",t:"info",hint:"Mit diesem Namen meldet sich die Person an. Er ändert sich nicht, wenn du den IC-Namen oben änderst."},
+      {n:"vorname",l:"Vorname",t:"text",req:1,col:1},
+      {n:"nachname",l:"Nachname",t:"text",req:1,col:1},
+      {n:"login",l:"Login-Name",t:"info",hint:"Mit diesem Namen meldet sich die Person an. Er ändert sich nicht, wenn du Vor- oder Nachnamen oben änderst."},
       {n:"rang",l:"Rang",t:"rank",col:1,lock:d=>!canEditMA(d),def:5},
       {n:"telefon",l:"Telefon",t:"tel",col:1},
       {n:"eintritt",l:"Eintritt",t:"date"},
@@ -737,7 +740,9 @@ function plain(f,d){
   if(f.money)return money(v);
   return v==null?"":String(v);
 }
+const splitName=n=>{const t=String(n||"").trim().split(/\s+/);return {v:t[0]||"",n:t.slice(1).join(" ")}};
 function cell(f,d,ek){
+  if(ek==="mitarbeiter"&&(f.n==="vorname"||f.n==="nachname")&&d[f.n]==null){const sp=splitName(d.name);d=Object.assign({},d,{vorname:sp.v,nachname:sp.n})}
   const v=f.n==="typ"&&ek==="preise"?(d.typ||"Einzelleistung"):d[f.n];
   if(ek==="buchungen"&&f.n==="status"&&d.personalOffen&&v!=="Abgesagt"&&v!=="Erledigt")return '<span class="pill '+(TONE[v]||"")+'">'+esc(v)+'</span><div style="margin-top:4px"><span class="pill alert">Personalplanung offen</span></div>';
   if(f.n==="status"||f.n==="art"||f.n==="typ")return v?'<span class="pill '+(TONE[v]||"")+'">'+esc(v)+"</span>":"";
@@ -756,7 +761,7 @@ function cell(f,d,ek){
     return '<span class="mono">'+t+"</span>";
   }
   const txt=esc(plain(f,d));
-  return f===ENT[ek].fields[0]||(ek==="sonder"&&f.n==="kunde")?'<span class="main">'+txt+"</span>":txt;
+  return f===ENT[ek].fields[0]||(ek==="sonder"&&f.n==="kunde")||(ek==="mitarbeiter"&&f.n==="nachname")?'<span class="main">'+txt+"</span>":txt;
 }
 const neuList=()=>data.mitarbeiter.filter(m=>m.status==="Neu");
 
@@ -1414,12 +1419,13 @@ function openForm(ek,id,linkId,preset,v2pos){
     if(d&&d.v===2){vals.aktiv=d.aktiv!==false;vals.gsOk=d.gsOk!==false;vals.takt=String(d.takt||30)}
     cur.tarif=t;
   }
+  if(ek==="mitarbeiter"&&d&&vals.vorname==null&&vals.nachname==null){const sp=splitName(d.name);vals.vorname=sp.v;vals.nachname=sp.n}
   cur.vals=vals;
   let h="",inGroup=false;
   if(freischalten){
     const cands=data.mitarbeiter.filter(m=>!m.login&&m.id!==d.id&&(P.full||rk(m)>=3)).sort(ENT.mitarbeiter.sort);
     const old=linkId?byId("mitarbeiter",linkId):null;
-    if(old){["name","rang","telefon","eintritt","notiz","zKontakte","zIntern"].forEach(k=>{if(old[k]!=null)vals[k]=old[k]});cur.link=old.id}
+    if(old){["name","vorname","nachname","rang","telefon","eintritt","notiz","zKontakte","zIntern"].forEach(k=>{if(old[k]!=null)vals[k]=old[k]});if(old.vorname==null){const sp=splitName(old.name);vals.vorname=sp.v;vals.nachname=sp.n}cur.link=old.id}
     if(!P.full){vals.zKontakte=false;vals.zIntern=false}
     vals.status="Aktiv";if(rankPos(rk(vals))>=98)vals.rang=(LISTS.raenge.find(r=>r.name==="Security Mitarbeiter")||LISTS.raenge[LISTS.raenge.length-1]||{nr:99}).nr;
     h+='<div class="notice info"><div>Wähle Rang und bei Bedarf Rechte, dann „Freischalten“. Danach kann <b>'+esc(d.name)+'</b> die Seite nutzen.</div></div>';
@@ -1560,6 +1566,7 @@ $("#form").addEventListener("submit",async ev=>{
   ev.preventDefault();
   if(saving||!cur||cur.ro)return;
   const E=ENT[cur.ek];let body=collect(E,cur.d||{});
+  if(cur.ek==="mitarbeiter"&&("vorname" in body||"nachname" in body)){body.vorname=(body.vorname||"").replace(/\s+/g," ");body.nachname=(body.nachname||"").replace(/\s+/g," ");body.name=(body.vorname+" "+body.nachname).trim()}
   for(const f of E.fields){
     if(f.req&&!isLocked(f,cur.d||{})&&(body[f.n]===""||body[f.n]==null)){showErr(f.l+" fehlt.");$("#f_"+f.n).focus();return}
   }
@@ -1707,31 +1714,33 @@ function setAuthMode(m){
   $("#aPass2").required=m==="reg";
   $("#aPass").autocomplete=m==="reg"?"new-password":"current-password";
   $("#authBtn").textContent=m==="reg"?"Registrieren":"Anmelden";
-  $("#authNote").textContent=m==="reg"?"Nur IC-Name und Passwort, keine E-Mail. Nach der Registrierung schaltet dich die Leitung frei. Merk dir dein Passwort gut: Zurücksetzen per E-Mail geht nicht.":"Noch kein Zugang? Wechsle auf „Registrieren“. Keine E-Mail nötig.";
+  $("#authNote").textContent=m==="reg"?"Nur Vorname, Nachname und Passwort, keine E-Mail. Nach der Registrierung schaltet dich die Leitung frei. Merk dir dein Passwort gut: Zurücksetzen per E-Mail geht nicht.":"Mit Vor- und Nachnamen anmelden, so wie bei der Registrierung. Noch kein Zugang? Wechsle auf „Registrieren“.";
   $("#authErr").hidden=true;
 }
 function authErr(m){const e=$("#authErr");e.textContent=m;e.hidden=false}
 function authErrText(e){
   const c=e&&e.code||"";
-  if(c==="auth/email-already-in-use")return "Dieser IC-Name ist schon vergeben.";
-  if(c==="auth/invalid-credential"||c==="auth/wrong-password"||c==="auth/user-not-found"||c==="auth/invalid-login-credentials")return "IC-Name oder Passwort stimmt nicht.";
+  if(c==="auth/email-already-in-use")return "Dieser Name ist schon vergeben.";
+  if(c==="auth/invalid-credential"||c==="auth/wrong-password"||c==="auth/user-not-found"||c==="auth/invalid-login-credentials")return "Name oder Passwort stimmt nicht.";
   if(c==="auth/weak-password")return "Das Passwort braucht mindestens 6 Zeichen.";
   if(c==="auth/too-many-requests")return "Zu viele Versuche. Warte ein paar Minuten.";
   if(c==="auth/network-request-failed")return "Keine Verbindung. Prüfe dein Internet.";
   if(c==="auth/operation-not-allowed")return "Die Anmeldung mit Passwort ist im Firebase-Projekt noch nicht eingeschaltet.";
   return "Das hat nicht geklappt ("+c+").";
 }
-let pendingRegName=null,ensuring=false;
+let pendingRegName=null,pendingVN=null,ensuring=false;
 $("#authForm").addEventListener("submit",async ev=>{
   ev.preventDefault();
-  const name=$("#aName").value.trim().replace(/\s+/g," "),pw=$("#aPass").value,s=slug(name);
-  if(s.replace(/\./g,"").length<2){authErr("Der IC-Name braucht mindestens zwei Buchstaben oder Ziffern.");return}
+  const vor=$("#aVor").value.trim().replace(/\s+/g," "),nach=$("#aNach").value.trim().replace(/\s+/g," ");
+  const name=(vor+" "+nach).trim(),pw=$("#aPass").value,s=slug(name);
+  if(authMode==="reg"&&(!vor||!nach)){authErr("Bitte Vor- und Nachnamen angeben.");return}
+  if(s.replace(/\./g,"").length<2){authErr("Der Name braucht mindestens zwei Buchstaben oder Ziffern.");return}
   const email=s+"@"+LOGIN_DOMAIN;
   $("#authBtn").disabled=true;
   try{
     if(authMode==="reg"){
       if(pw!==$("#aPass2").value){authErr("Die Passwörter stimmen nicht überein.");return}
-      pendingRegName=name;
+      pendingRegName=name;pendingVN={v:vor,n:nach};
       const cred=await createUserWithEmailAndPassword(auth,email,pw);
       try{await updateProfile(cred.user,{displayName:name})}catch(e){}
     }else{
@@ -1746,7 +1755,8 @@ async function ensureOwnDoc(user){
     const name=pendingRegName||user.displayName||String(user.email||"").split("@")[0];
     const login=String(user.email||"").split("@")[0];
     const now=new Date().toISOString();
-    const base={name,login,erstelltAt:now,erstelltVon:user.uid,erstelltName:name,geaendertAt:now,geaendertVon:user.uid,geaendertName:name};
+    const vn=pendingVN||splitName(name);
+    const base={name,vorname:vn.v,nachname:vn.n,login,erstelltAt:now,erstelltVon:user.uid,erstelltName:name,geaendertAt:now,geaendertVon:user.uid,geaendertName:name};
     const setupRef=doc(db,"config","setup");
     const s=await getDoc(setupRef);
     if(!s.exists()){
@@ -1758,7 +1768,7 @@ async function ensureOwnDoc(user){
       await setDoc(doc(db,"mitarbeiter",user.uid),Object.assign({rang:99,status:"Neu"},base));
     }
   }catch(e){console.error(e)}
-  finally{ensuring=false;pendingRegName=null}
+  finally{ensuring=false;pendingRegName=null;pendingVN=null}
 }
 
 let meUnsub=null;
