@@ -204,6 +204,37 @@ img{max-width:100%}
 .posrow select{background:var(--field);border:1px solid var(--line);border-radius:6px;padding:8px;min-width:0;width:100%}
 .posrow .pos-p{text-align:right;font-family:var(--f-mono);font-size:13px;white-space:nowrap}
 @media (max-width:620px){.posrow{grid-template-columns:1fr 1fr auto}.posrow .pos-l{grid-column:1/-1}.posrow .pos-p{text-align:left}}
+.sheet.wide{width:min(880px,100%)}
+.pcards{display:flex;flex-direction:column;gap:12px}
+.pcard{background:var(--raise);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.pc-head{display:flex;gap:8px;align-items:center}
+.pc-head select{flex:1;min-width:0;background:var(--field);border:1px solid var(--line);border-radius:6px;padding:9px 10px;font-weight:600}
+.pc-meta{display:flex;gap:6px;flex-wrap:wrap}
+.pc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.pc-info{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
+.pc-info b{color:var(--ink)}
+.pc-calc{background:var(--field);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:13px;display:flex;flex-direction:column;gap:2px}
+.pc-calc .pc-sum,.pc-calc .pc-gssum{font-weight:700;color:var(--accent);text-align:right}
+.pc-note{color:var(--warn);font-size:12px}
+.pc-gs{border:1px dashed var(--line);border-radius:6px;padding:8px 10px;display:flex;flex-direction:column;gap:8px}
+.pc-gs.on{border-color:var(--bad);border-style:solid}
+.pc-calc.gs .pc-gssum{color:var(--bad)}
+.pc-staff{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:8px}
+.pc-need{font-size:13px}.pc-need b.open{color:var(--alert)}.pc-need b.ok{color:var(--good)}
+.pc-abende{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pc-abende .abend{display:inline-flex;gap:4px;align-items:center}
+.pc-abende input{background:var(--field);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+.warnline{color:var(--alert);font-size:12px;font-weight:600}
+.warnline:empty{display:none}
+.totals{background:var(--field);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}
+.trow{display:flex;justify-content:space-between;gap:12px;font-size:13px}
+.trow.zw{border-top:1px solid var(--line);padding-top:4px;font-weight:600}
+.trow.end{border-top:2px solid var(--accent);padding-top:6px;font-size:18px;font-weight:700;color:var(--accent)}
+.actions.sticky{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--accent);padding:10px 0 4px;margin-top:4px;z-index:2;align-items:center}
+.foot-total{display:flex;flex-direction:column;line-height:1.1;margin-right:auto}
+.foot-total span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.foot-total b{font-family:var(--f-display);font-size:26px;color:var(--accent)}
+@media (max-width:520px){.pc-grid{grid-template-columns:1fr}}
 .calcinfo{font-size:12px;color:var(--muted);background:var(--raise);border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin-top:-6px}
 .calcinfo b{color:var(--accent)}
 .info-field{background:var(--field);border:1px dashed var(--line);border-radius:6px;padding:9px 10px;font-family:var(--f-mono);font-weight:400;font-size:13px}
@@ -319,10 +350,15 @@ const db=getFirestore(fbApp);
 
 /* ---------- Ränge & Rechte ---------- */
 const R_K="Kunde erhält von uns",R_W="Wir erhalten vom Partner";
+/* Zähler: wofür die Anzahl in einer Buchungszeile steht */
+const ZAEHLER={ma:{t:"pro Mitarbeiter",s:"Pers.",p:"Mitarbeiter"},fz:{t:"pro Fahrzeug",s:"Fahrz.",p:"Fahrzeuge"},tag:{t:"pro Tag",s:"Tage",p:"Tage"},fix:{t:"Festpreis (keine Anzahl)",s:"",p:""}};
+const guessZ=n=>/fahrzeug/i.test(n||"")?"fz":/\btag/i.test(n||"")?"tag":/festpreis/i.test(n||"")?"fix":"ma";
+const abrList=()=>(LISTS.abrechnung||[]).map(x=>typeof x==="string"?{name:x,z:guessZ(x)}:{name:x.name,z:ZAEHLER[x.z]?x.z:"ma"});
+function zOf(pr){if(!pr)return "ma";const a=abrList().find(x=>x.name===pr.einheit);return a?a.z:guessZ(pr.einheit)}
 const TOP_RANKS=["Geschäftsführer/in","Stellvertretende/r Geschäftsführer/in","Leitende/r Angestellte/r"];
 const DEFAULT_LISTS={
   raenge:[{nr:3,name:"Sicherheitsberater"},{nr:4,name:"Personenschutz"},{nr:5,name:"Security Mitarbeiter"},{nr:6,name:"Ausbildung"},{nr:7,name:"Fahrer"},{nr:8,name:"Privatermittler"}],
-  abrechnung:["pro Stunde","pro Einsatz","pro Tag","pauschal"],
+  abrechnung:[{name:"pro Stunde",z:"ma"},{name:"pro Einsatz",z:"ma"},{name:"pro Fahrzeug",z:"fz"},{name:"pro Tag",z:"tag"},{name:"pauschal",z:"ma"},{name:"Festpreis",z:"fix"}],
   kundenarten:["Privatperson","Unternehmen","Organisation","Behörde","Partner"],
   sonderArten:["Rabatt","Sonderpreis","Freileistung","Sonstiges"]
 };
@@ -334,7 +370,8 @@ const rankName=i=>(typeof i==="number"&&i<3)?TOP_RANKS[i]:((LISTS.raenge.find(r=
 const TONE={"Paket":"gold","Aktiv":"good","Bestätigt":"good","Erledigt":"good","Angefragt":"warn","Interessent":"warn","Entwurf":"warn","Urlaub":"warn","Pausiert":"warn","Neu":"warn","Hoch":"bad","Abgesagt":"bad","Gekündigt":"bad","Gesperrt":"bad","Beendet":"bad","Ausgelaufen":"bad","Ausgetreten":"bad","Widerrufen":"bad","Abgelaufen":"bad"};
 
 let uid=null,me=null,meLoaded=false;
-const P={full:false,leitung:false,kontakte:false,intern:false,todo:false,actor:false};
+const P={full:false,leitung:false,kontakte:false,intern:false,todo:false,actor:false,sys:false};
+const SB_RANG=3; /* Sicherheitsberater: To-Do, Einstellungen, Backup */
 function computePerms(){
   const aktiv=!!me&&(me.status==="Aktiv"||me.status==="Urlaub");
   const r=aktiv?rk(me):99;
@@ -342,14 +379,15 @@ function computePerms(){
   P.leitung=r<=2;
   P.kontakte=P.full||(aktiv&&me.zKontakte===true);
   P.intern=P.full||(aktiv&&me.zIntern===true);
-  P.todo=P.leitung;
+  P.sys=P.full||r===SB_RANG;
+  P.todo=P.leitung||P.sys;
   P.actor=aktiv;
 }
 const canEditMA=d=>P.full||(P.leitung&&rk(d)>=3);
 
 const ENT={
   mitarbeiter:{label:"Mitarbeiter",one:"Mitarbeiter",nw:"Neuer Mitarbeiter",art:"den ersten Mitarbeiter",
-    read:()=>P.kontakte||P.intern||P.leitung, access:()=>P.kontakte||P.leitung,
+    read:()=>P.kontakte||P.intern||P.leitung||P.sys, access:()=>P.kontakte||P.leitung,
     canCreate:()=>P.leitung, canEdit:d=>canEditMA(d)||P.kontakte, canDelete:d=>d.id!==uid&&(P.full||(P.leitung&&!d.login&&rk(d)>=3)),
     sort:(a,b)=>rankPos(rk(a))-rankPos(rk(b))||String(a.name||"").localeCompare(String(b.name||""),"de"),
     fields:[
@@ -403,8 +441,8 @@ const ENT={
       {n:"richtung",l:"Wer bekommt den Vorteil?",t:"select",o:[R_K,R_W],def:R_K},
       {n:"kunde",l:"Kunde / Partner",t:"ref",ref:"kunden",req:1,col:1},
       {n:"art",l:"Art",t:"select",o:()=>LISTS.sonderArten,def:"Rabatt",col:1},
-      {n:"rabattProzent",l:"Rabatt auf Buchungen (%)",t:"number",col:1,showIf:{f:"richtung",eq:R_K},hint:"Wird bei Buchungen dieses Kunden automatisch abgezogen, solange die Vereinbarung aktiv und gültig ist."},
-      {n:"wert",l:"Vorteil kurz",t:"text",col:1,hint:"z. B. 20 % auf Essen, Gratis-Getränke, 500 $ pro Einsatz"},
+      {n:"rabattProzent",l:"Rabatt (%)",lblBy:{f:"richtung",m:{[R_K]:"Rabatt auf Buchungen (%)",[R_W]:"Rabatt (%)"}},t:"number",col:1,hint:"Wird bei Buchungen dieses Kunden automatisch abgezogen, solange die Vereinbarung aktiv und gültig ist."},
+      {n:"wert",l:"Bemerkungen",lblBy:{f:"richtung",m:{[R_K]:"Bemerkungen",[R_W]:"Vorteil kurz"}},t:"text",col:1,hint:"Bei Kunden z. B. Stammkunde seit …, bei Partnern z. B. 20 % auf Essen."},
       {n:"gueltigBis",l:"Gültig bis",t:"date",col:1},
       {n:"beschreibung",l:"Beschreibung",t:"textarea"},
       {n:"status",l:"Status",t:"select",o:["Aktiv","Abgelaufen","Widerrufen"],def:"Aktiv",col:1}]},
@@ -414,13 +452,15 @@ const ENT={
     sort:(a,b)=>String(b.datum||"").localeCompare(String(a.datum||""))||String(b.uhrzeit||"").localeCompare(String(a.uhrzeit||"")),
     fields:[
       {n:"kunde",l:"Kunde",t:"ref",ref:"kunden",req:1,col:1},
-      {n:"positionen",l:"Leistungen",t:"pos",col:1},
       {n:"datum",l:"Datum",t:"date",req:1,col:1},
-      {n:"uhrzeit",l:"Uhrzeit",t:"time"},
-      {n:"aufschlag",l:"Aufschlag (%)",t:"number",hint:"z. B. 20 für Nacht- oder Risikozuschlag. Leer lassen für keinen Aufschlag."},
-      {n:"rabatt",l:"Rabatt (%)",t:"number",hint:"Wird aus einer aktiven Sondervereinbarung des Kunden übernommen. Du kannst ihn ändern."},
-      {n:"mitarbeiter",l:"Eingeteilte Mitarbeiter",t:"multiref",ref:"mitarbeiter",col:1,filter:m=>m.status!=="Ausgetreten"&&m.status!=="Neu"&&m.status!=="Gesperrt"},
+      {n:"uhrzeit",l:"Uhrzeit",t:"time",hint:"Startzeit aller Leistungen, sofern dort keine eigene Startzeit steht."},
       {n:"ort",l:"Einsatzort",t:"text"},
+      {n:"positionen",l:"Leistungen",t:"pos",col:1},
+      {n:"pauschale",l:"Einsatzpauschale je Auftrag ($)",t:"number",money:1,v2:1,hint:"Wird höchstens einmal pro Buchung berechnet, egal wie viele Leistungen."},
+      {n:"aufschlag",l:"Aufschlag (%)",t:"number",hint:"z. B. 20 für kurzfristige Beauftragung. Leer lassen für keinen Aufschlag."},
+      {n:"aufschlagGrund",l:"Grund des Aufschlags",t:"text",v2:1,hint:"Pflicht, sobald ein Aufschlag eingetragen ist."},
+      {n:"rabatt",l:"Rabatt (%)",t:"number",hint:"Wird aus einer aktiven Sondervereinbarung des Kunden übernommen. Du kannst ihn ändern (0–100 %)."},
+      {n:"mitarbeiter",l:"Eingeteilte Mitarbeiter",t:"multiref",ref:"mitarbeiter",col:1,filter:m=>m.status!=="Ausgetreten"&&m.status!=="Neu"&&m.status!=="Gesperrt"},
       {n:"betrag",l:"Betrag ($)",t:"number",money:1,col:1,hint:"Wird aus Leistung, Stunden und Aufschlag berechnet. Du kannst ihn von Hand überschreiben."},
       {n:"status",l:"Status",t:"select",o:["Angefragt","Bestätigt","Erledigt","Abgesagt"],def:"Angefragt",col:1,hint:"Ab „Bestätigt“ erscheint der Einsatz automatisch bei den Terminen."},
       {n:"bezahlt",l:"Bezahlt",t:"check",hint:"Lässt sich auch unter Intern → Abrechnung abhaken."},
@@ -430,20 +470,26 @@ const ENT={
     canCreate:()=>P.intern,canEdit:()=>P.intern,canDelete:()=>P.intern,
     sort:(a,b)=>(a.typ==="Paket"?1:0)-(b.typ==="Paket"?1:0)||String(a.leistung||"").localeCompare(String(b.leistung||""),"de"),
     fields:[
-      {n:"leistung",l:"Name",t:"text",req:1,col:1},
-      {n:"typ",l:"Typ",t:"select",o:["Einzelleistung","Paket"],def:"Einzelleistung",col:1,hint:"Ein Paket bündelt mehrere Einzelleistungen zu einem eigenen Preis."},
-      {n:"inhalt",l:"Enthaltene Leistungen",t:"multiref",ref:"preise",showIf:{f:"typ",eq:"Paket"},filter:i=>i.typ!=="Paket"&&(!cur||i.id!==cur.id)},
-      {n:"einheit",l:"Abrechnung",t:"select",o:()=>LISTS.abrechnung,def:"pro Einsatz",col:1,hint:"Weitere Abrechnungsarten legt die Geschäftsführung unter System → Einstellungen an."},
-      {n:"preis",l:"Grundpreis ($)",t:"number",req:1,money:1,col:1},
-      {n:"inklStunden",l:"Im Grundpreis enthaltene Stunden",t:"number",hint:"z. B. 3. Leer lassen, wenn der Preis nicht von der Dauer abhängt."},
-      {n:"preisWeitere",l:"Preis je weitere angefangene Stunde ($)",t:"number",money:1,hint:"z. B. 750. Gilt nur zusammen mit den enthaltenen Stunden."},
-      {n:"beschreibung",l:"Beschreibung",t:"textarea"}],
-    extra:[{l:"Inhalt",html:d=>{
-      if(d.typ!=="Paket")return esc(d.beschreibung||"");
-      const items=(d.inhalt||[]).map(id=>byId("preise",id)).filter(Boolean);
-      const sum=items.reduce((s,x)=>s+(Number(x.preis)||0),0),save=sum-(Number(d.preis)||0);
-      return esc(items.map(x=>x.leistung).join(", ")||"Noch leer")+'<div class="sub">Einzelpreise zusammen '+esc(money(sum)||"0 $")+(save>0?' · <span style="white-space:nowrap">Ersparnis '+esc(money(save))+"</span>":"")+"</div>";
-    }}]},
+      {n:"leistung",l:"Name der Leistung",t:"text",req:1,col:1},
+      {n:"beschreibung",l:"Beschreibung / Leistungsumfang",t:"textarea"},
+      {n:"unit",l:"Abrechnungseinheit",t:"select",o:()=>UNIT_OPTS,def:"sk"},
+      {n:"satz",l:"Preis ($)",lblBy:{f:"unit",m:{sk:"Preis je Stunde und Sicherheitskraft ($)",bf:"Preis je Stunde und Begleitfahrzeug ($)",sf:"Preis je Stunde und Streifenfahrzeug ($)",fz:"Preis je Stunde und Fahrzeug mit Fahrer ($)",ab:"Preis je Objekt und Abend ($)",pa:"Pauschalpreis ($)",gs:"Zuschlag je Sicherheitskraft und Stunde ($)"}},t:"number",money:1,req:1},
+      {n:"minStd",l:"Mindestbuchungsdauer (Std.)",t:"number",showIf:{f:"unit",eq:"sk|bf|sf|fz"},hint:"Kürzere Buchungen werden mit dieser Dauer berechnet. 0 = keine Mindestdauer."},
+      {n:"takt",l:"Abrechnungstakt nach der Mindestdauer",t:"select",o:[{v:"15",l:"15 Minuten"},{v:"30",l:"30 Minuten"},{v:"60",l:"60 Minuten"}],def:"30",showIf:{f:"unit",eq:"sk|bf|sf|fz"}},
+      {n:"besatzung",l:"Enthaltene Mitarbeiter je Fahrzeug",t:"number",showIf:{f:"unit",eq:"bf|sf|fz"},hint:"Diese Besatzung ist im Fahrzeugpreis enthalten und wird nicht extra berechnet."},
+      {n:"von",l:"Zeitfenster von",t:"time",def:"18:00",showIf:{f:"unit",eq:"ab"}},
+      {n:"bis",l:"Zeitfenster bis",t:"time",def:"00:00",showIf:{f:"unit",eq:"ab"},hint:"00:00 = Mitternacht (24:00)."},
+      {n:"gsOk",l:"Gefahrenschutz als Zusatz möglich",t:"check",def:true,showIf:{f:"unit",eq:"sk|bf|sf|fz"}},
+      {n:"aktiv",l:"Aktiv (bei neuen Buchungen wählbar)",t:"check",def:true}],
+    extra:[
+      {l:"Abrechnungseinheit",html:d=>{const t=tarifOf(d);return esc(UNITS[t.unit].t)+(t.unit==="gs"?'<div class="sub">Wird als Zusatz zu Hauptleistungen gebucht.</div>':"")}},
+      {l:"Tarif",html:d=>{const t=tarifOf(d),k=UNITS[t.unit].kind;
+        if(t.bestand)return '<span class="mono">'+esc(legacyText(t.legacy))+'</span><div class="sub">Bestandstarif</div>';
+        let sub=[];if(k==="pers"||k==="veh"){sub.push(t.minStd?"Mindestens "+fmtH(t.minStd)+" Std., danach "+t.takt+"-Min.-Takt":t.takt+"-Min.-Takt")}
+        if(k==="veh")sub.push("Besatzung "+t.besatzung+" je Fahrzeug");if(k==="abend")sub.push("Zeitfenster "+t.von+"–"+bisTxt(t.bis)+" Uhr");
+        return '<span class="mono">'+esc(money(t.satz)||"0 $")+"</span>"+(sub.length?'<div class="sub">'+esc(sub.join(" · "))+"</div>":"")}},
+      {l:"Status",html:d=>{const t=tarifOf(d);return '<div class="pills">'+(t.aktiv?'<span class="pill good">Aktiv</span>':'<span class="pill">Inaktiv</span>')+t.pruef.map(x=>'<span class="pill alert">'+esc(x)+"</span>").join("")+(!t.v2?t.hinweis.map(x=>'<span class="pill warn">'+esc(x)+"</span>").join("")+(t.bestand?"":'<span class="pill">automatisch übernommen</span>'):"")+"</div>"}}
+    ]},
   brett:{label:"Schwarzes Brett",one:"Aushang",nw:"Neuer Aushang",
     read:()=>true, access:()=>true,
     canCreate:()=>P.actor,canEdit:d=>P.actor&&(d.erstelltVon===uid||P.leitung),canDelete:d=>P.actor&&(d.erstelltVon===uid||P.leitung),
@@ -481,15 +527,14 @@ const NAV=[
   {cat:"System",items:["einst","backup"]}
 ];
 ENT.abrechnung={label:"Abrechnung",page:true,read:()=>false,access:()=>P.intern,canCreate:()=>false,canEdit:()=>false,canDelete:()=>false,fields:[]};
-ENT.einst={label:"Einstellungen",page:true,read:()=>false,access:()=>P.full,canCreate:()=>false,canEdit:()=>false,canDelete:()=>false,fields:[]};
-ENT.backup={label:"Backup",page:true,read:()=>false,access:()=>P.full,canCreate:()=>false,canEdit:()=>false,canDelete:()=>false,fields:[]};
+ENT.einst={label:"Einstellungen",page:true,read:()=>false,access:()=>P.sys,canCreate:()=>false,canEdit:()=>false,canDelete:()=>false,fields:[]};
+ENT.backup={label:"Backup",page:true,read:()=>false,access:()=>P.sys,canCreate:()=>false,canEdit:()=>false,canDelete:()=>false,fields:[]};
 const COLLS=Object.keys(ENT).filter(k=>!ENT[k].page);
 
 /* ---------- Einstellungen (nur GF) ---------- */
 let listsUnsub=null;
 const LIST_META={
   raenge:{t:"Ränge ab Rang 4",d:"Geschäftsführer/in, Stellvertretung und Leitende sind fest, weil an ihnen die Rechte hängen. Die Reihenfolge hier bestimmt die Sortierung der Mitarbeiterliste. Ein Rang, den noch jemand hat, lässt sich nicht löschen."},
-  abrechnung:{t:"Abrechnungsarten",d:"Auswahl bei Preisen. Enthält der Name „Stunde“, rechnet eine Buchung ohne enthaltene Stunden mit der Stundenzahl."},
   kundenarten:{t:"Kundenarten",d:"Auswahl „Art“ bei Kunden."},
   sonderArten:{t:"Arten der Sondervereinbarungen",d:"Auswahl „Art“ bei Sondervereinbarungen."}
 };
@@ -500,8 +545,8 @@ async function saveLists(next){
 let einstMsg="";
 function alertBox(m){einstMsg=m;render()}
 function listAction(spec){
-  if(!P.full)return;
-  const [key,act,arg]=spec.split(":"),next=JSON.parse(JSON.stringify(LISTS)),arr=next[key];
+  if(!P.sys)return;
+  const [key,act,arg]=spec.split(":"),next=JSON.parse(JSON.stringify(LISTS));next.abrechnung=abrList();const arr=next[key];
   const i=key==="raenge"?arr.findIndex(r=>String(r.nr)===arg):parseInt(arg,10);
   if(i<0||i>=arr.length)return;
   if(act==="up"&&i>0){const x=arr[i];arr[i]=arr[i-1];arr[i-1]=x}
@@ -514,34 +559,44 @@ function listAction(spec){
   einstMsg="";saveLists(next);
 }
 function listRename(spec,val){
-  if(!P.full)return;
+  if(!P.sys)return;
   const [key,arg]=spec.split(":"),v=String(val||"").trim();if(!v)return;
-  const next=JSON.parse(JSON.stringify(LISTS)),arr=next[key];
+  const next=JSON.parse(JSON.stringify(LISTS));next.abrechnung=abrList();const arr=next[key];
   if(key==="raenge"){const r=arr.find(x=>String(x.nr)===arg);if(!r||r.name===v)return;r.name=v}
+  else if(key==="abrechnung"){const i=parseInt(arg,10);if(!arr[i]||arr[i].name===v)return;if(arr.some(x=>x.name===v)){alertBox("„"+v+"“ gibt es schon.");return}arr[i].name=v}
   else{const i=parseInt(arg,10);if(arr[i]===v)return;if(arr.indexOf(v)>-1){alertBox("„"+v+"“ gibt es schon.");return}arr[i]=v}
   einstMsg="";saveLists(next);
 }
 function listAdd(key){
-  if(!P.full)return;
+  if(!P.sys)return;
   const el=$("#lsnew_"+key);if(!el)return;const v=el.value.trim();if(!v)return;
-  const next=JSON.parse(JSON.stringify(LISTS)),arr=next[key];
-  if(key==="raenge"){if(arr.some(r=>r.name===v)){alertBox("„"+v+"“ gibt es schon.");return}arr.push({nr:Math.max(8,...arr.map(r=>r.nr))+1,name:v})}
+  const next=JSON.parse(JSON.stringify(LISTS));next.abrechnung=abrList();const arr=next[key];
+  if(key==="abrechnung"){if(arr.some(x=>x.name===v)){alertBox("„"+v+"“ gibt es schon.");return}arr.push({name:v,z:guessZ(v)})}
+  else if(key==="raenge"){if(arr.some(r=>r.name===v)){alertBox("„"+v+"“ gibt es schon.");return}arr.push({nr:Math.max(8,...arr.map(r=>r.nr))+1,name:v})}
   else{if(arr.indexOf(v)>-1){alertBox("„"+v+"“ gibt es schon.");return}arr.push(v)}
   einstMsg="";saveLists(next);
+}
+function listZ(spec,val){
+  if(!P.sys||!ZAEHLER[val])return;
+  const i=parseInt(spec.split(":")[1],10),next=JSON.parse(JSON.stringify(LISTS));next.abrechnung=abrList();
+  if(!next.abrechnung[i]||next.abrechnung[i].z===val)return;
+  next.abrechnung[i].z=val;einstMsg="";saveLists(next);
 }
 function renderEinst(){
   let h='<div class="toolbar"><h2>Einstellungen</h2></div>';
   if(einstMsg)h+='<div class="notice">'+esc(einstMsg)+"</div>";
   h+='<div class="stack">';
+  h+='<section class="post"><h3>Tarife</h3><div class="sub">Einsatzpauschale je Auftrag: wird bei neuen Buchungen vorgeschlagen und höchstens einmal pro Buchung berechnet. Der Gefahrenschutz-Satz kommt aus der Leistung „Gefahrenschutz“ unter Preise (aktuell '+esc(money(gsSatz()))+' je Sicherheitskraft und Stunde).</div><div class="lsrow"><span style="flex:0 0 auto">Einsatzpauschale ($)</span><input id="ls_pausch" inputmode="decimal" value="'+esc(String(LISTS.einsatzpauschale||0).replace(".",","))+'"><button class="btn small" type="button" id="savePausch">Speichern</button></div></section>';
   Object.keys(LIST_META).forEach(key=>{
-    const M=LIST_META[key],arr=LISTS[key]||[];
+    const M=LIST_META[key],arr=key==="abrechnung"?abrList():(LISTS[key]||[]);
     h+='<section class="post"><h3>'+esc(M.t)+'</h3><div class="sub">'+esc(M.d)+'</div><div class="stack" style="gap:6px">';
     if(key==="raenge")TOP_RANKS.forEach((n,i)=>{h+='<div class="lsrow fixed"><span class="rk">'+(i+1)+'.</span><span style="flex:1">'+esc(n)+'</span><span class="sub">fest</span></div>'});
     arr.forEach((it,i)=>{
-      const name=key==="raenge"?it.name:it,arg=key==="raenge"?it.nr:i;
+      const name=key==="raenge"||key==="abrechnung"?it.name:it,arg=key==="raenge"?it.nr:i;
       const used=key==="raenge"?data.mitarbeiter.filter(m=>m.rang===it.nr).length:0;
       h+='<div class="lsrow">'+(key==="raenge"?'<span class="rk">'+(i+4)+".</span>":"")+
         '<input id="ls_'+key+"_"+arg+'" aria-label="Name" value="'+esc(name)+'" data-lsren="'+key+":"+arg+'">'+
+        (key==="abrechnung"?'<select data-lsz="abrechnung:'+i+'" aria-label="Anzahl zählt" style="background:var(--field);border:1px solid var(--line);border-radius:6px;padding:6px 8px">'+Object.keys(ZAEHLER).map(z=>'<option value="'+z+'"'+(it.z===z?" selected":"")+">"+esc(ZAEHLER[z].t)+"</option>").join("")+"</select>":"")+
         (key==="raenge"?'<span class="sub">'+used+(used===1?" Person":" Personen")+'</span><button class="iconbtn" type="button" data-ls="'+key+":up:"+arg+'" aria-label="Nach oben"'+(i===0?" disabled":"")+'>↑</button><button class="iconbtn" type="button" data-ls="'+key+":down:"+arg+'" aria-label="Nach unten"'+(i===arr.length-1?" disabled":"")+">↓</button>":"")+
         '<button class="iconbtn" type="button" data-ls="'+key+":del:"+arg+'" aria-label="Löschen"'+(used?" disabled title=\"Noch vergeben\"":"")+">✕</button></div>";
     });
@@ -593,7 +648,7 @@ function renderBackup(){
   let h='<div class="toolbar"><h2>Backup</h2></div><div class="stack">';
   h+='<section class="post"><h3>Backup herunterladen</h3><div class="body">Speichert alle Daten der Verwaltung als Datei auf diesem Gerät: Mitarbeiter, Kunden, Verträge, Sondervereinbarungen, Buchungen, Preise, Schwarzes Brett, Termine und To-Dos. Am besten einmal pro Woche und vor größeren Änderungen.</div>'+
      '<div class="rsvp"><button class="btn" type="button" id="bkDown"'+(bk.dbusy?" disabled":"")+'>Backup herunterladen</button>'+(bk.dmsg?'<span class="sub">'+esc(bk.dmsg)+"</span>":"")+"</div></section>";
-  h+='<section class="post"><h3>Backup einspielen</h3><div class="body">Setzt alle Daten auf den Stand der Datei zurück. Einträge, die es im Backup nicht gibt, werden gelöscht. Wer sich seitdem neu registriert hat, erscheint beim nächsten Anmelden wieder als neue Registrierung. Deine eigene Akte bleibt unverändert.</div>';
+  h+='<section class="post"><h3>Backup einspielen</h3><div class="body">Setzt alle Daten auf den Stand der Datei zurück. Einträge, die es im Backup nicht gibt, werden gelöscht. Wer sich seitdem neu registriert hat, erscheint beim nächsten Anmelden wieder als neue Registrierung. Deine eigene Akte bleibt unverändert.'+(P.full?"":" Mitarbeiterakten (Ränge und Rechte) spielt nur die Geschäftsführung zurück, sie bleiben hier unverändert.")+'</div>';
   if(!bk.data){
     h+='<label class="f" for="bkFile"><span>Backup-Datei wählen</span><input type="file" id="bkFile" accept=".json,application/json"></label>';
   }else{
@@ -610,7 +665,7 @@ function renderBackup(){
   return h+"</section></div>";
 }
 async function doExport(){
-  if(!P.full||bk.dbusy)return;
+  if(!P.sys||bk.dbusy)return;
   bk.dbusy=true;bk.dmsg="Wird erstellt…";render();
   try{
     const out={app:"blackline-verwaltung",version:1,exportedAt:new Date().toISOString(),exportedBy:me&&me.name||"",collections:{}};
@@ -638,12 +693,13 @@ async function readBackupFile(file){
   render();
 }
 async function doRestore(){
-  if(!P.full||!bk.data||bk.busy)return;
+  if(!P.sys||!bk.data||bk.busy)return;
   bk.busy=true;bk.armed=false;bk.err="";bk.progress="Aktuellen Stand lesen…";render();
   const cols=bk.data.collections,ops=[];
   try{
     for(const k of COLLS.concat(["einstellungen"])){
       if(!(k in cols))continue;
+      if(k==="mitarbeiter"&&!P.full)continue; /* Ränge & Rechte stellt nur die Geschäftsführung zurück */
       const want=cols[k],cur=await getDocs(collection(db,k));
       cur.forEach(d=>{if(!(d.id in want)&&!(k==="mitarbeiter"&&d.id===uid))ops.push(()=>deleteDoc(doc(db,k,d.id)))});
       Object.keys(want).forEach(id=>{if(k==="mitarbeiter"&&id===uid)return;ops.push(()=>setDoc(doc(db,k,id),want[id]))});
@@ -683,18 +739,20 @@ function plain(f,d){
 }
 function cell(f,d,ek){
   const v=f.n==="typ"&&ek==="preise"?(d.typ||"Einzelleistung"):d[f.n];
+  if(ek==="buchungen"&&f.n==="status"&&d.personalOffen&&v!=="Abgesagt"&&v!=="Erledigt")return '<span class="pill '+(TONE[v]||"")+'">'+esc(v)+'</span><div style="margin-top:4px"><span class="pill alert">Personalplanung offen</span></div>';
   if(f.n==="status"||f.n==="art"||f.n==="typ")return v?'<span class="pill '+(TONE[v]||"")+'">'+esc(v)+"</span>":"";
   if(f.t==="rank"){const i=rk(d),ps=rankPos(i);return ps<98?'<span class="rk">'+(ps+1)+"</span>"+esc(rankName(i)):'<span class="sub">Ohne Rang</span>'}
   if(ek==="preise"&&f.n==="preis"){const ih=Number(d.inklStunden)||0;return '<span class="mono">'+esc(money(v))+"</span>"+(ih?'<div class="sub">für '+ih+" Std."+(d.preisWeitere?" · +"+esc(money(d.preisWeitere))+" je weitere Std.":"")+"</div>":"")}
   if(ek==="sonder"&&f.n==="rabattProzent"){const pc=pctOf(d);return pc?'<span class="pill gold">−'+esc(String(pc).replace(".",","))+" %</span>":'<span class="sub">–</span>'}
-  if(f.t==="pos"){const l=getPos(d);return l.length?l.map(x=>{const pr=byId("preise",x.leistung),n=Number(x.personen)||1;return esc(pr?pr.leistung:"(unbekannt)")+(x.stunden||n>1?' <span class="sub">'+[x.stunden?esc(x.stunden)+" Std.":"",n>1?n+" Pers.":""].filter(Boolean).join(" · ")+"</span>":"")}).join("<br>"):'<span class="sub">–</span>'}
+  if(f.t==="pos"&&isV2(d))return d.positionen.map(x=>{const t=v2PosLabel(x,true),i=t.indexOf(" (");return i>0?esc(t.slice(0,i))+' <span class="sub">'+esc(t.slice(i+1))+"</span>":esc(t)}).join("<br>");
+  if(f.t==="pos"){const l=getPos(d);return l.length?l.map(x=>{const pr=byId("preise",x.leistung),n=Number(x.personen)||1,u=ZAEHLER[zOf(pr)].s;return esc(pr?pr.leistung:"(unbekannt)")+(x.stunden||n>1?' <span class="sub">'+[x.stunden?esc(x.stunden)+" Std.":"",n>1&&u?n+" "+u:""].filter(Boolean).join(" · ")+"</span>":"")}).join("<br>"):'<span class="sub">–</span>'}
   if(ek==="buchungen"&&f.n==="betrag")return '<span class="mono">'+esc(money(v))+"</span>"+(d.bezahlt?'<div class="sub" style="color:var(--good)">bezahlt</div>':"");
   if(f.money)return '<span class="mono">'+esc(money(v))+"</span>";
   if(f.t==="tel")return '<span class="mono">'+esc(v||"")+"</span>";
   if(f.t==="date"){
     let t=esc(fdate(v));
     const std=ek==="buchungen"?(Math.max(0,...getPos(d).map(x=>Number(x.stunden)||0))||null):null;
-    if(ek==="buchungen"&&(d.uhrzeit||std))t+='<div class="sub mono">'+(d.uhrzeit?esc(d.uhrzeit)+" Uhr":"")+(d.uhrzeit&&std?" · ":"")+(std?esc(std)+" Std.":"")+"</div>";
+    if(ek==="buchungen"&&(d.uhrzeit||std)&&!isNaN(std||0))t+='<div class="sub mono">'+(d.uhrzeit?esc(d.uhrzeit)+" Uhr":"")+(d.uhrzeit&&std?" · ":"")+(std?esc(std)+" Std.":"")+"</div>";
     return '<span class="mono">'+t+"</span>";
   }
   const txt=esc(plain(f,d));
@@ -771,9 +829,9 @@ function renderNotices(){
   $("#whoami").innerHTML=me?"<b>"+esc(me.name||"")+"</b> · "+esc(me.status==="Neu"?"wartet auf Freischaltung":rankName(rk(me))):"";
 }
 function denied(E){
-  if(E===ENT.einst)return '<div class="denied"><strong>Kein Zugriff</strong>Die Einstellungen kann nur die Geschäftsführung ändern.</div>';
-  if(E===ENT.backup)return '<div class="denied"><strong>Kein Zugriff</strong>Backups kann nur die Geschäftsführung erstellen und einspielen.</div>';
-  const why=E===ENT.todos?"Die To-Do-Liste sehen nur Leitende Angestellte und die Geschäftsführung.":"Den Zugriff erteilt die Geschäftsführung in deiner Mitarbeiterakte.";
+  if(E===ENT.einst)return '<div class="denied"><strong>Kein Zugriff</strong>Die Einstellungen können nur die Geschäftsführung und der Sicherheitsberater ändern.</div>';
+  if(E===ENT.backup)return '<div class="denied"><strong>Kein Zugriff</strong>Backups können nur die Geschäftsführung und der Sicherheitsberater erstellen und einspielen.</div>';
+  const why=E===ENT.todos?"Die To-Do-Liste sehen nur die Geschäftsführung, Leitende Angestellte und der Sicherheitsberater.":"Den Zugriff erteilt die Geschäftsführung in deiner Mitarbeiterakte.";
   return '<div class="denied"><strong>Kein Zugriff</strong>'+esc(why)+"</div>";
 }
 const emptyBox=(t,h)=>'<div class="empty"><strong>'+esc(t)+"</strong>"+esc(h)+"</div>";
@@ -797,6 +855,7 @@ function renderTable(){
     '<input type="search" id="q" placeholder="Suchen" aria-label="Suchen" value="'+esc(query)+'">'+
     (sf?'<select id="sf" aria-label="Status filtern"><option value="">Alle Status</option>'+sf.o.map(o=>"<option"+(o===statusFilter?" selected":"")+">"+esc(o)+"</option>").join("")+"</select>":"")+
     (E.canCreate()&&ek!=="sonder"?'<button class="btn" type="button" id="newBtn">+ '+esc(E.one)+"</button>":"")+"</div>";
+  if(ek==="preise"){const bad=data.preise.filter(x=>tarifOf(x).bestand);if(bad.length)h+='<div class="notice"><div><b>Preisprüfung erforderlich:</b> '+esc(bad.map(x=>x.leistung).join(", "))+". Diese Tarife lassen sich nicht eindeutig ins neue Modell übertragen. Sie werden bis zur Festlegung weiter als Bestandstarif berechnet.</div></div>"}
   if(!rows.length&&ek!=="sonder"){
     const hint=!loaded[ek]?"Lade Daten…":data[ek].length?"Passe Suche oder Filter an.":(E.canCreate()?"Lege "+E.art+" mit dem Knopf oben an.":"Sobald jemand Einträge anlegt, erscheinen sie hier.");
     return h+emptyBox(data[ek].length?"Nichts gefunden":"Noch keine Einträge",hint);
@@ -806,8 +865,8 @@ function renderTable(){
     rs.map(d=>'<tr data-open="'+ek+":"+esc(d.id)+'">'+cs.map(f=>'<td class="'+(f.money?"num":"")+'">'+cell(f,d,ek)+"</td>").join("")+ex.map(x=>"<td>"+x.html(d)+"</td>").join("")+"</tr>").join("")+"</tbody></table></div>";
   if(ek==="sonder"){
     const gk=rows.filter(d=>(d.richtung||R_K)===R_K),gw=rows.filter(d=>d.richtung===R_W);
-    const ck=cols.map(f=>f.n==="kunde"?Object.assign({},f,{l:"Kunde"}):f);
-    const cw=cols.filter(f=>f.n!=="rabattProzent").map(f=>f.n==="kunde"?Object.assign({},f,{l:"Partner"}):f);
+    const ck=cols.map(f=>f.n==="kunde"?Object.assign({},f,{l:"Kunde"}):f.n==="rabattProzent"?Object.assign({},f,{l:"Rabatt auf Buchungen"}):f.n==="wert"?Object.assign({},f,{l:"Bemerkungen"}):f);
+    const cw=cols.map(f=>f.n==="kunde"?Object.assign({},f,{l:"Partner"}):f.n==="rabattProzent"?Object.assign({},f,{l:"Rabatt"}):f.n==="wert"?Object.assign({},f,{l:"Vorteil kurz"}):f);
     return h+'<h3 class="sec">Vorteile für Kunden <span class="sub" style="text-transform:none;letter-spacing:0">– was wir unseren Kunden geben</span></h3>'+
       (gk.length?table(gk,ck):emptyBox("Keine Einträge","Rabatte mit Prozentangabe werden bei Buchungen automatisch abgezogen."))+
       (E.canCreate()?'<div style="margin-top:8px"><button class="btn ghost small" type="button" data-new="sonder:k">+ Vorteil für Kunden</button></div>':"")+
@@ -912,15 +971,21 @@ function getPos(b){
   const st=b.stunden!=null?b.stunden:(b.dauer?Math.ceil(num(b.dauer)||0)||null:null);
   return [{leistung:b.leistung,stunden:st,personen:1}];
 }
+function v2PosLabel(x,withHours){
+  const U=UNITS[x.unit]||UNITS.sk,k=U.kind,n=parseInt(x.anzahl,10)||0;let d=[];
+  if(withHours){if(k==="abend")d.push(n+" "+(n===1?U.one:U.cnt)+", "+(x.abende||[]).length+" Abende");else if(k!=="pausch"){d.push(fmtH(x.stunden)+" Std.");d.push(n+" "+(n===1?U.one:U.cnt))}}
+  return (x.name||"Leistung")+(d.length?" ("+d.join(", ")+")":"")+(x.gs&&x.gs.aktiv?" + Gefahrenschutz":"");
+}
 function posText(b,withHours){
-  return getPos(b).map(x=>{const pr=byId("preise",x.leistung),n=Number(x.personen)||1;return (pr?pr.leistung:"(unbekannt)")+(withHours&&(x.stunden||n>1)?" ("+[x.stunden?x.stunden+" Std.":"",n>1?n+" Pers.":""].filter(Boolean).join(", ")+")":"")}).join(", ");
+  if(isV2(b))return b.positionen.map(x=>v2PosLabel(x,withHours)).join(", ");
+  return getPos(b).map(x=>{const pr=byId("preise",x.leistung),n=Number(x.personen)||1,u=ZAEHLER[zOf(pr)].s;return (pr?pr.leistung:"(unbekannt)")+(withHours&&(x.stunden||n>1)?" ("+[x.stunden?x.stunden+" Std.":"",n>1&&u?n+" "+u:""].filter(Boolean).join(", ")+")":"")}).join(", ");
 }
 function calcAll(list,auf,rab){
   const rows=list.filter(x=>x.leistung&&byId("preise",x.leistung));
   if(!rows.length)return null;
   let sum=0;const lines=[];
-  rows.forEach(x=>{const pr=byId("preise",x.leistung),c=calcBetrag(pr,x.stunden,0),n=Math.max(1,Number(x.personen)||1),t=Math.round(c.sum*n*100)/100;sum+=t;
-    lines.push(pr.leistung+": "+(n>1?"("+c.text+") × "+n+" Mitarbeiter = "+money(t):c.text))});
+  rows.forEach(x=>{const pr=byId("preise",x.leistung),c=calcBetrag(pr,x.stunden,0),z=zOf(pr),n=z==="fix"?1:Math.max(1,Number(x.personen)||1),t=Math.round(c.sum*n*100)/100;sum+=t;
+    lines.push(pr.leistung+": "+(n>1?"("+c.text+") × "+n+" "+ZAEHLER[z].p+" = "+money(t):c.text))});
   const a=Number(auf)||0,r=Math.min(100,Math.max(0,Number(rab)||0));
   const z=a?Math.round(sum*a)/100:0,rz=r?Math.round(sum*r)/100:0;
   const total=Math.round((sum+z-rz)*100)/100;
@@ -961,15 +1026,319 @@ async function syncTermin(bid,b){
   else await setDoc(ref,Object.assign(f,stamp(true)));
 }
 
+/* ================= Preismodell v2 ================= */
+const UNITS={
+  sk:{t:"Je Sicherheitskraft und Stunde",cnt:"Sicherheitskräfte",one:"Sicherheitskraft",kind:"pers"},
+  bf:{t:"Je Begleitfahrzeug und Stunde",cnt:"Begleitfahrzeuge",one:"Begleitfahrzeug",kind:"veh"},
+  sf:{t:"Je Streifenfahrzeug und Stunde",cnt:"Streifenfahrzeuge",one:"Streifenfahrzeug",kind:"veh"},
+  fz:{t:"Je Fahrzeug mit Fahrer und Stunde",cnt:"Fahrzeuge",one:"Fahrzeug",kind:"veh"},
+  ab:{t:"Je Objekt und gebuchtem Abend",cnt:"Objekte",one:"Objekt",kind:"abend"},
+  pa:{t:"Pauschal je Auftrag",cnt:"",one:"",kind:"pausch"},
+  gs:{t:"Zuschlag je betroffener Sicherheitskraft und Stunde",cnt:"Sicherheitskräfte",one:"Sicherheitskraft",kind:"gs"}
+};
+const UNIT_OPTS=Object.keys(UNITS).map(k=>({v:k,l:UNITS[k].t}));
+const NAME_UNIT={"alarmbereitschaft":"ab","eskorte":"bf","eventschutz":"sk","objektschutz":"sk","personenschutz":"sk","revierfahrten":"sf","vip-fahrdienst":"fz","gefahrenschutz":"gs"};
+const GS_DEFAULT=300;
+const r2=x=>Math.round((Number(x)||0)*100)/100;
+const fmtH=h=>String(r2(h)).replace(".",",");
+const fmtPct=p=>String(r2(p)).replace(".",",")+" %";
+const kindOf=p=>(UNITS[p.unit]||UNITS.sk).kind;
+const bisTxt=b=>(!b||b==="00:00"||b==="24:00")?"24:00":b;
+
+/* Tarif einer Leistung: neues Modell (v:2) oder automatisch aus dem Bestandstarif abgeleitet */
+function tarifOf(pr){
+  if(!pr)return null;
+  const t={id:pr.id,name:pr.leistung||"",umfang:pr.beschreibung||"",aktiv:pr.aktiv!==false,von:pr.von||"18:00",bis:pr.bis||"00:00",pruef:[],hinweis:[],bestand:false,legacy:null,v2:pr.v===2};
+  if(pr.v===2){
+    const u=UNITS[pr.unit]?pr.unit:"sk",k=UNITS[u].kind;
+    return Object.assign(t,{unit:u,satz:Number(pr.satz)||0,minStd:Number(pr.minStd)||0,takt:Number(pr.takt)||30,besatzung:Math.max(1,Number(pr.besatzung)||1),gsOk:pr.gsOk!==false&&(k==="pers"||k==="veh")});
+  }
+  const nm=String(pr.leistung||"").trim().toLowerCase(),z=zOf(pr);
+  const u=NAME_UNIT[nm]||(z==="fz"?"fz":z==="tag"?"ab":z==="fix"?"pa":"sk"),k=UNITS[u].kind;
+  const p=Number(pr.preis)||0,inkl=Number(pr.inklStunden)||0,w=Number(pr.preisWeitere)||0,hourly=/stunde/i.test(pr.einheit||"");
+  Object.assign(t,{unit:u,satz:0,minStd:0,takt:60,besatzung:1,gsOk:k==="pers"||k==="veh",legacy:{preis:p,inkl,weitere:w,einheit:pr.einheit||"",hourly}});
+  if(k==="abend"||k==="gs"||k==="pausch"){if(p>0)t.satz=p;else t.pruef.push("Preis fehlt")}
+  else if(inkl>0&&w>0&&Math.abs(p/inkl-w)<0.005){t.satz=w;t.minStd=inkl}
+  else if(!inkl&&hourly&&p>0){t.satz=p;t.minStd=1}
+  else t.pruef.push(p>0?"Preisprüfung erforderlich":"Preis fehlt");
+  if(k==="veh")t.hinweis.push("Besatzung je Fahrzeug festlegen");
+  t.bestand=t.pruef.length>0;
+  return t;
+}
+function gsSatz(){const g=data.preise.map(tarifOf).find(t=>t&&t.unit==="gs"&&t.aktiv&&t.satz>0);return g?g.satz:GS_DEFAULT}
+function legacyText(L){return money(L.preis)+(L.inkl?" für "+fmtH(L.inkl)+" Std."+(L.weitere?", +"+money(L.weitere)+" je weitere angefangene Std.":""):(L.hourly?" je Std.":""))+(L.einheit?" ("+L.einheit+")":"")}
+function legacyPrice(L,h){h=Number(h)||0;if(L.inkl>0)return L.preis+Math.max(0,Math.ceil(h-L.inkl-1e-9))*L.weitere;if(L.hourly)return L.preis*Math.max(1,Math.ceil(h-1e-9));return L.preis}
+/* Abrechenbare Dauer: Mindestdauer, danach im Takt aufgerundet */
+function billH(h,minStd,takt){
+  h=Math.max(0,Number(h)||0);const st=(Number(takt)||30)/60,m=Math.max(0,Number(minStd)||0);
+  if(h<=m)return m;
+  return r2(m+Math.ceil((h-m)/st-1e-9)*st);
+}
+function bedarf(p){const k=kindOf(p),n=Math.max(0,parseInt(p.anzahl,10)||0);return k==="pers"?n:k==="veh"?n*(Number(p.besatzung)||1):0}
+
+/* Position (Preisstand wird in der Buchung gespeichert) */
+function snapInto(p,t){
+  Object.assign(p,{v:2,leistung:t.id,name:t.name,unit:t.unit,satz:t.satz,minStd:t.minStd,takt:t.takt,besatzung:t.besatzung,gsOk:t.gsOk,bestand:t.bestand,legacy:t.legacy,umfang:t.umfang,von:p.von||t.von,bis:p.bis||t.bis});
+  p.gs=p.gs||{aktiv:false,anzahl:0,stunden:0,manA:false,manH:false};
+  p.gs.satz=gsSatz();
+  if(!t.gsOk)p.gs.aktiv=false;
+  return p;
+}
+function newPos(prId,head){
+  const p={v:2,leistung:"",stunden:1,anzahl:1,start:"",abende:[],gs:{aktiv:false,anzahl:0,stunden:0,manA:false,manH:false},ma:[]};
+  const t=tarifOf(byId("preise",prId));if(!t)return p;
+  snapInto(p,t);
+  p.stunden=Math.max(t.minStd||0,1);
+  if(kindOf(p)==="abend")p.abende=head&&head.datum?[head.datum]:[];
+  return p;
+}
+
+/* Zentrale Berechnung – gilt für Maske, Übersicht und Abrechnung */
+function calcPos(p){
+  const k=kindOf(p),U=UNITS[p.unit]||UNITS.sk,n=Math.max(0,parseInt(p.anzahl,10)||0),h=Number(p.stunden)||0;
+  const o={haupt:0,text:"",gs:0,gsText:"",note:"",bh:h};
+  if(!p.leistung)return o;
+  const unit=x=>x===1?U.one:U.cnt;
+  if(k==="abend"){
+    const a=(p.abende||[]).filter(Boolean).length;
+    o.haupt=r2(n*a*p.satz);o.text=n+" "+unit(n)+" × "+a+(a===1?" Abend":" Abende")+" × "+money(p.satz)+" = "+money(o.haupt);
+  }else if(k==="pausch"){o.haupt=r2(p.satz);o.text="Pauschal "+money(p.satz)}
+  else if(p.bestand&&p.legacy){
+    const one=legacyPrice(p.legacy,h);o.haupt=r2(one*n);
+    o.text=n+" "+unit(n)+" × "+money(one)+" (Bestandstarif, "+fmtH(h)+" Std.) = "+money(o.haupt);
+  }else{
+    const bh=billH(h,p.minStd,p.takt);o.bh=bh;o.haupt=r2(n*bh*p.satz);
+    o.text=n+" "+unit(n)+" × "+fmtH(bh)+" Std. × "+money(p.satz)+" = "+money(o.haupt);
+    if(Math.abs(bh-h)>0.001)o.note="Gebucht "+fmtH(h)+" Std., berechnet "+fmtH(bh)+" Std. "+(h<Number(p.minStd)?"(Mindestbuchungsdauer)":"(aufgerundet auf "+p.takt+"-Minuten-Takt)");
+  }
+  if(p.gs&&p.gs.aktiv&&(k==="pers"||k==="veh")){
+    const st=(Number(p.takt)||30)/60,gh=Math.min(Number(p.gs.stunden)||0,h),gn=Math.min(parseInt(p.gs.anzahl,10)||0,bedarf(p));
+    const gbh=gh>0?r2(Math.ceil(gh/st-1e-9)*st):0;
+    o.gs=r2(gbh*gn*(Number(p.gs.satz)||0));
+    o.gsText=gn+(gn===1?" Sicherheitskraft":" Sicherheitskräfte")+" × "+fmtH(gbh)+" Std. × "+money(p.gs.satz)+" = "+money(o.gs);
+  }
+  return o;
+}
+function calcBooking(pos,auf,rab,pausch){
+  let h=0,g=0;const per=(pos||[]).map(p=>{const c=calcPos(p);h+=c.haupt;g+=c.gs;return c});
+  const pa=r2(Math.max(0,Number(pausch)||0)),zw=r2(h+g+pa),a=Math.max(0,Number(auf)||0),r=Math.min(100,Math.max(0,Number(rab)||0));
+  const ab=r2(zw*a/100),rb=r2((zw+ab)*r/100);
+  return {per,haupt:r2(h),gs:r2(g),pausch:pa,zw,aufP:a,aufB:ab,rabP:r,rabB:rb,end:r2(zw+ab-rb)};
+}
+const isV2=b=>b&&(b.preismodell===2||(Array.isArray(b.positionen)&&b.positionen.length>0&&b.positionen.every(x=>x.v===2)));
+
+/* Zeiten & Überschneidungen (inkl. Ende nach Mitternacht) */
+function tsOf(d,t){if(!d||!t)return null;const pr=String(t).split(":").map(Number);const x=new Date(d+"T00:00:00");if(isNaN(x))return null;x.setHours(pr[0]||0,pr[1]||0,0,0);return x.getTime()}
+function posIntervals(p,head){
+  if(kindOf(p)==="abend")return (p.abende||[]).filter(Boolean).map(d=>{const s=tsOf(d,p.von||"18:00");let e=tsOf(d,p.bis&&p.bis!=="24:00"?p.bis:"00:00");if(e<=s)e+=86400000;return {s,e,lab:p.name}});
+  if(kindOf(p)==="pausch")return [];
+  const s=tsOf(head.datum,p.start||head.uhrzeit);if(s==null)return [];
+  return [{s,e:s+Math.max(Number(p.stunden)||0,0.5)*3600000,lab:p.name}];
+}
+const spanTxt=iv=>{const d=new Date(iv.s),e=new Date(iv.e),z=n=>String(n).padStart(2,"0");return z(d.getDate())+"."+z(d.getMonth()+1)+". "+z(d.getHours())+":"+z(d.getMinutes())+"–"+z(e.getHours())+":"+z(e.getMinutes())+" Uhr"};
+function busyOf(maId,exceptId){
+  const out=[];
+  data.buchungen.forEach(b=>{
+    if(b.id===exceptId||b.status==="Abgesagt")return;
+    const k=byId("kunden",b.kunde),kn=k?k.name:"";
+    if(isV2(b))b.positionen.forEach(p=>{if((p.ma||[]).some(m=>maCanon(m)===maId))posIntervals(p,b).forEach(iv=>out.push(Object.assign(iv,{kn})))});
+    else if((b.mitarbeiter||[]).some(m=>maCanon(m)===maId)){const s=tsOf(b.datum,b.uhrzeit);if(s!=null){const h=Math.max(1,...getPos(b).map(x=>Number(x.stunden)||0));out.push({s,e:s+h*3600000,lab:posText(b,false)||"Einsatz",kn})}}
+  });
+  return out;
+}
+function draftHead(){return {datum:($("#f_datum")||{}).value||"",uhrzeit:($("#f_uhrzeit")||{}).value||""}}
+function conflictFor(maId,i){
+  const head=draftHead(),mine=posIntervals(cur.pos[i],head);if(!mine.length)return null;
+  for(let j=0;j<cur.pos.length;j++){
+    if(j===i||!(cur.pos[j].ma||[]).includes(maId))continue;
+    for(const a of mine)for(const b of posIntervals(cur.pos[j],head))if(a.s<b.e&&b.s<a.e)return "überschneidet sich in dieser Buchung mit „"+cur.pos[j].name+"“ ("+spanTxt(b)+")";
+  }
+  for(const b of busyOf(maId,cur.id))for(const a of mine)if(a.s<b.e&&b.s<a.e)return "ist bereits bei „"+b.lab+"“"+(b.kn?" für "+b.kn:"")+" eingeteilt ("+spanTxt(b)+")";
+  return null;
+}
+const maName=id=>{const m=byId("mitarbeiter",maCanon(id));return m&&m.name||"Unbekannt"};
+
+/* ---------- Leistungskarten ---------- */
+function hoursOpts(v){let o="";for(let x=0.5;x<=24.001;x+=0.5)o+='<option value="'+x+'"'+(Math.abs(x-v)<0.01?" selected":"")+">"+fmtH(x)+" Std.</option>";return o}
+function prOptions(sel){
+  const items=data.preise.filter(x=>{const t=tarifOf(x);return x.id===sel||(t.unit!=="gs"&&t.aktiv)}).sort(ENT.preise.sort);
+  return '<option value="">– Leistung wählen –</option>'+items.map(i=>'<option value="'+esc(i.id)+'"'+(i.id===sel?" selected":"")+">"+esc(i.leistung||"")+"</option>").join("");
+}
+const maChoices=()=>data.mitarbeiter.filter(m=>m.status!=="Ausgetreten"&&m.status!=="Neu"&&m.status!=="Gesperrt").sort(ENT.mitarbeiter.sort);
+function cardHTML(p,i){
+  const ro=cur&&cur.ro?" disabled":"";
+  let h='<div class="pcard" data-i="'+i+'"><div class="pc-head"><select class="pc-l" aria-label="Leistung"'+ro+">"+prOptions(p.leistung)+"</select>"+(ro?"":'<button class="iconbtn" type="button" data-pcdel="'+i+'" aria-label="Leistung entfernen" title="Leistung entfernen">✕</button>')+"</div>";
+  if(!p.leistung)return h+'<div class="sub">Wähle eine Leistung aus.</div></div>';
+  const U=UNITS[p.unit]||UNITS.sk,k=U.kind;
+  h+='<div class="pc-meta"><span class="pill">'+esc(U.t)+"</span>"+(p.bestand?'<span class="pill warn">Bestandstarif · Preisprüfung erforderlich</span>':"")+"</div>";
+  if(p.umfang)h+='<div class="sub">'+esc(p.umfang)+"</div>";
+  h+='<div class="pc-grid">';
+  if(k==="pers"||k==="veh"){
+    h+='<label class="f"><span>Dauer</span><select class="pc-h"'+ro+">"+hoursOpts(Number(p.stunden)||0.5)+"</select></label>";
+    h+='<label class="f"><span>Anzahl '+esc(U.cnt)+'</span><input class="pc-n" type="number" min="1" max="99" step="1" inputmode="numeric" value="'+esc(p.anzahl)+'"'+ro+"></label>";
+    h+='<label class="f"><span>Startzeit</span><input class="pc-start" type="time" value="'+esc(p.start||"")+'"'+ro+'><span class="hint">Leer = Buchungsuhrzeit</span></label>';
+  }else if(k==="abend"){
+    h+='<label class="f"><span>Anzahl Objekte</span><input class="pc-n" type="number" min="1" max="99" step="1" inputmode="numeric" value="'+esc(p.anzahl)+'"'+ro+"></label>";
+    h+='<label class="f"><span>Zeitfenster von</span><input class="pc-von" type="time" value="'+esc(p.von||"18:00")+'"'+ro+"></label>";
+    h+='<label class="f"><span>bis</span><input class="pc-bis" type="time" value="'+esc(p.bis==="24:00"?"00:00":(p.bis||"00:00"))+'"'+ro+'><span class="hint">00:00 = Mitternacht</span></label>';
+  }
+  h+="</div>";
+  if(k==="abend")h+='<div class="f"><span>Gebuchte Abende</span><div class="pc-abende">'+(p.abende||[]).map((d,j)=>'<span class="abend"><input type="date" class="pc-abend" data-j="'+j+'" value="'+esc(d)+'"'+ro+">"+(ro?"":'<button class="iconbtn" type="button" data-abdel="'+i+":"+j+'" aria-label="Abend entfernen">✕</button>')+"</span>").join("")+(ro?"":'<button class="btn ghost small" type="button" data-abadd="'+i+'">+ Abend</button>')+'</div><span class="pc-abwarn warnline"></span></div>';
+  const info=[];
+  if(k==="pers"||k==="veh"){
+    if(p.bestand&&p.legacy)info.push(esc("Bestandstarif je "+U.one+": "+legacyText(p.legacy)));
+    else{info.push(esc("Stundensatz: "+money(p.satz)+" je "+U.one));info.push(esc(p.minStd?"Mindestbuchungsdauer "+fmtH(p.minStd)+" Std., danach "+p.takt+"-Minuten-Takt":"Abrechnung im "+p.takt+"-Minuten-Takt"))}
+  }
+  if(k==="veh")info.push(esc("Enthaltene Besatzung: "+p.besatzung+" je "+U.one+" (im Fahrzeugpreis enthalten)")+' → <b class="pc-crew"></b>');
+  if(k==="abend")info.push(esc("Preis je Objekt und Abend: "+money(p.satz)+" · Zeitfenster "+(p.von||"18:00")+"–"+bisTxt(p.bis)+" Uhr. Reserviert Bereitschaft, tatsächliche Ausfahrten separat als Einsatz buchen."));
+  if(k==="pausch")info.push(esc("Pauschalpreis: "+money(p.satz)));
+  h+='<div class="pc-info">'+info.map(x=>"<div>"+x+"</div>").join("")+"</div>";
+  h+='<div class="pc-calc"><div class="pc-text"></div><div class="pc-note"></div><div class="pc-sum"></div></div>';
+  if(p.gsOk&&(k==="pers"||k==="veh")){
+    h+='<div class="pc-gs'+(p.gs&&p.gs.aktiv?" on":"")+'"><label class="f check"><input type="checkbox" class="pc-gson"'+(p.gs&&p.gs.aktiv?" checked":"")+ro+'><span>Gefahrenschutz hinzufügen<br><span class="hint">+'+esc(money(p.gs.satz||gsSatz()))+" je betroffener Sicherheitskraft und Stunde</span></span></label>";
+    if(p.gs&&p.gs.aktiv)h+='<div class="pc-grid"><label class="f"><span>Betroffene Sicherheitskräfte</span><input class="pc-gn" type="number" min="1" step="1" inputmode="numeric" value="'+esc(p.gs.anzahl)+'"'+ro+'></label><label class="f"><span>Dauer Gefahrenschutz</span><select class="pc-gh"'+ro+">"+hoursOpts(Number(p.gs.stunden)||0.5)+'</select></label></div><div class="pc-gswarn warnline"></div><div class="pc-calc gs"><div class="pc-gstext"></div><div class="pc-gssum"></div></div>';
+    h+="</div>";
+  }
+  if(k==="pers"||k==="veh"||k==="abend"){
+    const ids=(p.ma||[]);
+    h+='<div class="pc-staff"><div class="pc-need"></div><div class="chips">'+maChoices().map(m=>'<label><input type="checkbox" class="pc-ma" value="'+esc(m.id)+'"'+(ids.includes(m.id)?" checked":"")+ro+">"+esc(m.name||"")+"</label>").join("")+'</div><div class="pc-conf warnline"></div></div>';
+  }
+  return h+"</div>";
+}
+function v2EditorHTML(){
+  return '<div class="f"><span>Leistungen</span><div id="f_positionen" class="pcards">'+cur.pos.map(cardHTML).join("")+"</div>"+
+    (cur.ro?"":'<div class="rsvp"><button class="btn ghost small" type="button" id="pcAdd">+ Weitere Leistung</button>'+(cur.id?'<button class="linkbtn" type="button" id="pcRetarif">Aktuelle Tarife übernehmen</button>':"")+"</div>")+
+    '<span class="hint" id="retarifInfo">Die Preise werden mit der Buchung gespeichert. Spätere Tarifänderungen ändern diese Buchung nur, wenn du „Aktuelle Tarife übernehmen“ klickst.</span></div>';
+}
+function rerenderCard(i){const el=document.querySelector('.pcard[data-i="'+i+'"]');if(el)el.outerHTML=cardHTML(cur.pos[i],i);v2Recalc()}
+function rerenderCards(){const box=$("#f_positionen");if(box)box.innerHTML=cur.pos.map(cardHTML).join("");v2Recalc()}
+function syncGs(p,i){
+  if(!p.gs||!p.gs.aktiv)return;
+  const b=bedarf(p),el=document.querySelector('.pcard[data-i="'+i+'"]'),msgs=[];
+  if(!p.gs.manA)p.gs.anzahl=b;else if(p.gs.anzahl>b){p.gs.anzahl=b;msgs.push("Betroffene Sicherheitskräfte auf "+b+" begrenzt (Personalstärke der Hauptleistung).")}
+  if(!p.gs.manH)p.gs.stunden=p.stunden;else if(p.gs.stunden>p.stunden){p.gs.stunden=p.stunden;msgs.push("Dauer auf "+fmtH(p.stunden)+" Std. begrenzt (Dauer der Hauptleistung).")}
+  if(el){const gn=el.querySelector(".pc-gn"),gh=el.querySelector(".pc-gh");if(gn)gn.value=p.gs.anzahl;if(gh)gh.value=String(p.gs.stunden);const w=el.querySelector(".pc-gswarn");if(w)w.textContent=msgs.join(" ")}
+}
+function staffSummary(){
+  const rows=[];let open=false;
+  cur.pos.forEach(p=>{if(!p.leistung)return;const b=bedarf(p),z=(p.ma||[]).length;if(z<b)open=true;(p.ma||[]).forEach(id=>rows.push(esc(maName(id))+" → "+esc(p.name)))});
+  return (rows.length?rows.join("<br>"):'<span class="sub">Noch niemand zugeordnet.</span>')+(open?'<div style="margin-top:6px"><span class="pill alert">Personalplanung offen</span></div>':"");
+}
+function totalsHTML(k){
+  const grund=(($("#f_aufschlagGrund")||{}).value||"").trim();
+  const row=(l,v,c)=>'<div class="trow'+(c?" "+c:"")+'"><span>'+esc(l)+'</span><span class="mono">'+esc(v)+"</span></div>";
+  return row("Summe Hauptleistungen",money(k.haupt)||"0 $")+row("Summe Gefahrenschutz-Zusätze",money(k.gs)||"0 $")+row("Einsatzpauschale (einmalig)",money(k.pausch)||"0 $")+
+    row("Zwischensumme",money(k.zw)||"0 $","zw")+row("Aufschlag "+fmtPct(k.aufP)+(grund?" – "+grund:""),"+ "+(money(k.aufB)||"0 $"))+row("Rabatt "+fmtPct(k.rabP),"− "+(money(k.rabB)||"0 $"))+row("Endsumme",money(k.end)||"0 $","end");
+}
+function conflictsRefresh(){
+  let n=0;
+  cur.pos.forEach((p,i)=>{const el=document.querySelector('.pcard[data-i="'+i+'"] .pc-conf');if(!el)return;
+    const m=(p.ma||[]).map(id=>{const c=conflictFor(id,i);if(c){n++;return maName(id)+" "+c}return ""}).filter(Boolean);
+    el.textContent=m.length?"Konflikt: "+m.join(" · ")+" Bitte Zuordnung oder Zeit ändern.":"";
+  });
+  cur.conflicts=n;return n;
+}
+function v2Recalc(){
+  if(!cur||cur.mode!=="v2")return;
+  const k=calcBooking(cur.pos,num(($("#f_aufschlag")||{}).value),num(($("#f_rabatt")||{}).value),num(($("#f_pauschale")||{}).value));
+  cur.kalk=k;
+  cur.pos.forEach((p,i)=>{
+    const el=document.querySelector('.pcard[data-i="'+i+'"]');if(!el||!p.leistung)return;const c=k.per[i];
+    el.querySelector(".pc-text").textContent=c.text;el.querySelector(".pc-note").textContent=c.note;el.querySelector(".pc-sum").textContent="Positionssumme: "+(money(c.haupt)||"0 $");
+    const crew=el.querySelector(".pc-crew");if(crew)crew.textContent=bedarf(p)+" Sicherheitskräfte";
+    const gt=el.querySelector(".pc-gstext");if(gt){gt.textContent="Gefahrenschutz: "+c.gsText;el.querySelector(".pc-gssum").textContent="Zusatz: "+(money(c.gs)||"0 $")}
+    const nd=el.querySelector(".pc-need");
+    if(nd){const b=bedarf(p),z=(p.ma||[]).length,o=Math.max(0,b-z);nd.innerHTML=kindOf(p)==="abend"?"Zugeordnet: "+z+' <span class="sub">(optional bei Bereitschaft)</span>':"Benötigt: "+b+" | Zugeordnet: "+z+' | Offen: <b class="'+(o?"open":"ok")+'">'+o+"</b>"}
+    const aw=el.querySelector(".pc-abwarn");if(aw)aw.textContent=(p.abende||[]).filter(Boolean).length?"":"Mindestens einen Abend auswählen.";
+  });
+  const t=$("#v2tot");if(t)t.innerHTML=totalsHTML(k);
+  const ft=$("#v2foot");if(ft)ft.innerHTML="<span>Endsumme</span><b>"+esc(money(k.end)||"0 $")+"</b>";
+  const bf=$("#f_betrag");if(bf)bf.value=String(k.end);
+  const ms=$("#v2ma");if(ms)ms.innerHTML=staffSummary();
+  const aw=$("#aufWarn");if(aw)aw.textContent=(k.aufP>0&&cur.pos.some(p=>p.gs&&p.gs.aktiv))?"Gefahrenschutz ist bereits als Zusatz berechnet. Der Aufschlag darf nicht nochmals für dasselbe Risiko gelten, z. B. nur für kurzfristige Beauftragung.":"";
+  const ge=$("#aufGrundErr");if(ge&&(k.aufP===0||(($("#f_aufschlagGrund")||{}).value||"").trim()))ge.textContent="";
+  conflictsRefresh();
+}
+function v2Validate(){
+  const pos=cur.pos.filter(p=>p.leistung);
+  if(!pos.length)return {msg:"Wähle mindestens eine Leistung aus."};
+  for(const p of pos){
+    if(kindOf(p)!=="pausch"&&!(parseInt(p.anzahl,10)>=1))return {msg:"„"+p.name+"“: Anzahl muss mindestens 1 sein."};
+    if(kindOf(p)==="abend"&&!(p.abende||[]).filter(Boolean).length)return {msg:"„"+p.name+"“: Mindestens einen Abend auswählen."};
+  }
+  const a=num(($("#f_aufschlag")||{}).value)||0,r=num(($("#f_rabatt")||{}).value);
+  if(a<0)return {msg:"Der Aufschlag darf nicht negativ sein.",field:"f_aufschlag"};
+  if(a>0&&!(($("#f_aufschlagGrund")||{}).value||"").trim()){const ge=$("#aufGrundErr");if(ge)ge.textContent="Bitte einen Grund für den Aufschlag angeben.";return {msg:"Bitte einen Grund für den Aufschlag angeben.",field:"f_aufschlagGrund"}}
+  if(r!=null&&(r<0||r>100))return {msg:"Der Rabatt muss zwischen 0 und 100 % liegen.",field:"f_rabatt"};
+  if(conflictsRefresh())return {msg:"Es gibt zeitliche Überschneidungen bei der Personalplanung. Bitte im markierten Feld korrigieren."};
+  return null;
+}
+function v2Serialize(){
+  return cur.pos.filter(p=>p.leistung).map(p=>{
+    const o={v:2,leistung:p.leistung,name:p.name,unit:p.unit,satz:p.satz,minStd:p.minStd,takt:p.takt,besatzung:p.besatzung,gsOk:!!p.gsOk,bestand:!!p.bestand,legacy:p.legacy||null,umfang:p.umfang||"",
+      stunden:Number(p.stunden)||0,anzahl:parseInt(p.anzahl,10)||0,start:p.start||"",ma:(p.ma||[]).slice()};
+    if(kindOf(p)==="abend"){o.abende=(p.abende||[]).filter(Boolean);o.von=p.von||"18:00";o.bis=p.bis||"00:00"}
+    o.gs=p.gs&&p.gs.aktiv?{aktiv:true,anzahl:Math.min(parseInt(p.gs.anzahl,10)||0,bedarf(p)),stunden:Math.min(Number(p.gs.stunden)||0,Number(p.stunden)||0),satz:Number(p.gs.satz)||0,manA:!!p.gs.manA,manH:!!p.gs.manH}:{aktiv:false};
+    return o;
+  });
+}
+function legacyToV2(d){
+  const lp=getPos(d);
+  if(lp.some(x=>tarifOf(byId("preise",x.leistung))&&tarifOf(byId("preise",x.leistung)).unit==="gs"))return {err:"Diese Buchung enthält Gefahrenschutz als eigene Position. Sie bleibt im Bestand erhalten. Für eine Umstellung bitte neu erfassen und Gefahrenschutz als Zusatz wählen."};
+  const head={datum:d.datum,uhrzeit:d.uhrzeit},pool=(d.mitarbeiter||[]).map(maCanon);
+  const pos=lp.map(x=>{const p=newPos(x.leistung,head);if(x.stunden)p.stunden=Number(x.stunden);p.anzahl=Math.max(1,Number(x.personen)||1);const b=bedarf(p);p.ma=pool.splice(0,b);return p});
+  if(pool.length&&pos.length)pos[0].ma=pos[0].ma.concat(pool);
+  return {pos};
+}
+/* Bindungen in der Buchungsmaske */
+let v2Bound=false;
+function v2Bind(){
+  if(v2Bound)return;v2Bound=true;
+  const F=$("#form");
+  const idx=el=>{const c=el.closest(".pcard");return c?parseInt(c.dataset.i,10):-1};
+  F.addEventListener("change",ev=>{
+    const t=ev.target,i=idx(t);if(i<0||!cur||cur.mode!=="v2")return;const p=cur.pos[i];
+    if(t.classList.contains("pc-l")){
+      const keep={stunden:p.stunden,anzahl:p.anzahl,start:p.start,ma:p.ma,gs:p.gs};
+      const np=newPos(t.value,draftHead());
+      if(p.leistung&&kindOf(np)===kindOf(p)){np.stunden=Math.max(keep.stunden||0,np.minStd||0)||np.stunden;np.anzahl=keep.anzahl;np.start=keep.start;np.ma=keep.ma||[];if(keep.gs&&keep.gs.aktiv&&np.gsOk){np.gs=Object.assign({},keep.gs,{satz:gsSatz()})}}
+      else np.ma=(keep.ma||[]);
+      cur.pos[i]=np;syncGs(np,i);rerenderCard(i);return;
+    }
+    if(t.classList.contains("pc-h")){p.stunden=Number(t.value)||0.5;syncGs(p,i)}
+    else if(t.classList.contains("pc-start"))p.start=t.value;
+    else if(t.classList.contains("pc-von"))p.von=t.value||"18:00";
+    else if(t.classList.contains("pc-bis"))p.bis=t.value||"00:00";
+    else if(t.classList.contains("pc-abend")){p.abende[parseInt(t.dataset.j,10)]=t.value}
+    else if(t.classList.contains("pc-gson")){p.gs=p.gs||{};p.gs.aktiv=t.checked;if(t.checked){p.gs.anzahl=bedarf(p);p.gs.stunden=p.stunden;p.gs.manA=false;p.gs.manH=false;p.gs.satz=gsSatz()}rerenderCard(i);return}
+    else if(t.classList.contains("pc-gh")){p.gs.manH=true;p.gs.stunden=Number(t.value)||0.5;syncGs(p,i)}
+    else if(t.classList.contains("pc-ma")){
+      const id=t.value;p.ma=p.ma||[];
+      if(t.checked){const c=conflictFor(id,i);if(c){t.checked=false;const el=document.querySelector('.pcard[data-i="'+i+'"] .pc-conf');if(el)el.textContent="Nicht möglich: "+maName(id)+" "+c+".";return}if(!p.ma.includes(id))p.ma.push(id)}
+      else p.ma=p.ma.filter(x=>x!==id);
+    }
+    v2Recalc();
+  });
+  F.addEventListener("input",ev=>{
+    const t=ev.target;
+    if(["f_aufschlag","f_rabatt","f_pauschale","f_aufschlagGrund"].indexOf(t.id)>-1){v2Recalc();return}
+    const i=idx(t);if(i<0||!cur||cur.mode!=="v2")return;const p=cur.pos[i];
+    if(t.classList.contains("pc-n")){p.anzahl=Math.max(0,parseInt(t.value,10)||0);syncGs(p,i);v2Recalc()}
+    else if(t.classList.contains("pc-gn")){p.gs.manA=true;let v=parseInt(t.value,10)||0;const b=bedarf(p);const w=document.querySelector('.pcard[data-i="'+i+'"] .pc-gswarn');if(v>b){v=b;t.value=b;if(w)w.textContent="Höchstens "+b+" (Personalstärke der Hauptleistung)."}else if(w)w.textContent="";p.gs.anzahl=v;v2Recalc()}
+  });
+  F.addEventListener("change",ev=>{if(cur&&cur.mode==="v2"&&(ev.target.id==="f_datum"||ev.target.id==="f_uhrzeit"))v2Recalc()});
+}
+
+function countOpts(z,v){let o="";const u=ZAEHLER[z]||ZAEHLER.ma;for(let i=1;i<=20;i++)o+='<option value="'+i+'"'+(i===v?" selected":"")+">"+i+" "+(u.s||"×")+"</option>";if(v>20)o+='<option value="'+v+'" selected>'+v+" "+u.s+"</option>";return o}
 function posRowHTML(x,dis){
   const items=data.preise.slice().sort(ENT.preise.sort),cv=x.stunden==null?"":Number(x.stunden);
   let hs='<option value="">Std.</option>';for(let i=1;i<=24;i++)hs+='<option value="'+i+'"'+(i===cv?" selected":"")+">"+i+" Std.</option>";
-  const pv=Math.max(1,Number(x.personen)||1);let ps="";for(let i=1;i<=20;i++)ps+='<option value="'+i+'"'+(i===pv?" selected":"")+">"+i+" Pers.</option>";if(pv>20)ps+='<option value="'+pv+'" selected>'+pv+" Pers.</option>";
-  return '<div class="posrow"><select class="pos-l" aria-label="Leistung"'+(dis||"")+'><option value="">– Leistung wählen –</option>'+items.map(i=>'<option value="'+esc(i.id)+'"'+(i.id===x.leistung?" selected":"")+">"+esc((i.typ==="Paket"?"Paket: ":"")+(i.leistung||""))+"</option>").join("")+'</select><select class="pos-h" aria-label="Stunden"'+(dis||"")+">"+hs+'</select><select class="pos-n" aria-label="Anzahl Mitarbeiter"'+(dis||"")+">"+ps+'</select><span class="pos-p"></span>'+(dis?"":'<button class="iconbtn" type="button" data-posdel aria-label="Leistung entfernen">✕</button>')+"</div>";
+  const z=zOf(byId("preise",x.leistung)),ps=countOpts(z,Math.max(1,Number(x.personen)||1));
+  return '<div class="posrow" data-z="'+(x.leistung?z:"")+'"><select class="pos-l" aria-label="Leistung"'+(dis||"")+'><option value="">– Leistung wählen –</option>'+items.map(i=>'<option value="'+esc(i.id)+'"'+(i.id===x.leistung?" selected":"")+">"+esc((i.typ==="Paket"?"Paket: ":"")+(i.leistung||""))+"</option>").join("")+'</select><select class="pos-h" aria-label="Stunden"'+(dis||"")+">"+hs+'</select><select class="pos-n" aria-label="Anzahl"'+(dis||"")+(z==="fix"?' style="visibility:hidden"':"")+">"+ps+'</select><span class="pos-p"></span>'+(dis?"":'<button class="iconbtn" type="button" data-posdel aria-label="Leistung entfernen">✕</button>')+"</div>";
 }
 function readPos(){
   const box=$("#f_positionen");if(!box)return [];
-  return Array.prototype.map.call(box.querySelectorAll(".posrow"),r=>({leistung:r.querySelector(".pos-l").value,stunden:r.querySelector(".pos-h").value?parseInt(r.querySelector(".pos-h").value,10):null,personen:parseInt(r.querySelector(".pos-n").value,10)||1}));
+  return Array.prototype.map.call(box.querySelectorAll(".posrow"),r=>({leistung:r.querySelector(".pos-l").value,stunden:r.querySelector(".pos-h").value?parseInt(r.querySelector(".pos-h").value,10):null,personen:r.dataset.z==="fix"?1:(parseInt(r.querySelector(".pos-n").value,10)||1)}));
 }
 
 /* ---------- Formular ---------- */
@@ -978,18 +1347,21 @@ const isLocked=(f,d)=>!!(f.lock&&f.lock(d||{}));
 function fieldHTML(f,val,d){
   if(f.group)return '<div class="group"><div class="group-h">'+esc(f.group)+'</div><span class="hint sub">'+esc(f.hint||"")+"</span>";
   if(f.hideLocked&&isLocked(f,d))return "";
-  if(f.showIf){const inner=fieldHTML(Object.assign({},f,{showIf:null}),val,d);const on=String((cur&&cur.vals&&cur.vals[f.showIf.f])||"")===f.showIf.eq;return '<div data-showif="'+f.showIf.f+'" data-eq="'+esc(f.showIf.eq)+'"'+(on?"":" hidden")+">"+inner+"</div>"}
+  if(f.v2&&!(cur&&cur.mode==="v2"))return "";
+  if(f.showIf){const inner=fieldHTML(Object.assign({},f,{showIf:null}),val,d);const on=f.showIf.eq.split("|").indexOf(String((cur&&cur.vals&&cur.vals[f.showIf.f])||""))>-1;return '<div data-showif="'+f.showIf.f+'" data-eq="'+esc(f.showIf.eq)+'"'+(on?"":" hidden")+">"+inner+"</div>"}
   const id="f_"+f.n,req=f.req?' <span class="req">*</span>':"",dis=isLocked(f,d)?" disabled":"";
   const hint=f.hint?'<span class="hint">'+esc(f.hint)+"</span>":"";
   if(f.t==="info"){if(!val)return "";return '<div class="f"><span>'+esc(f.l)+'</span><div class="info-field">'+esc(val)+"</div>"+hint+"</div>"}
   if(f.t==="check")return '<label class="f check" for="'+id+'"><input type="checkbox" id="'+id+'"'+(val?" checked":"")+dis+"><span>"+esc(f.l)+(f.hint?'<br><span class="hint">'+esc(f.hint)+"</span>":"")+"</span></label>";
   let inp="";
   if(f.t==="textarea")inp='<textarea id="'+id+'" rows="'+(f.rows||3)+'"'+dis+">"+esc(val)+"</textarea>";
+  else if(f.t==="pos"&&cur&&cur.mode==="v2")return v2EditorHTML();
   else if(f.t==="pos"){
     const list=(val&&val.length)?val:[{leistung:"",stunden:null}];
     inp='<div class="posbox" id="'+id+'">'+list.map(x=>posRowHTML(x,dis)).join("")+'</div>'+(dis?"":'<button class="btn ghost small" type="button" data-posadd style="align-self:flex-start">+ Weitere Leistung</button>');
     const tag2="div";
-    return "<"+tag2+' class="f"><span>'+esc(f.l)+"</span>"+inp+'<span class="hint">Je Leistung: Stunden und Anzahl Mitarbeiter. Der Preis gilt pro Mitarbeiter und wird zusammengerechnet.</span></'+tag2+">";
+    if(cur&&cur.mode==="legacy"&&!dis)inp='<div class="notice info"><div>Diese Buchung nutzt noch die alte Berechnung. Betrag und Preise bleiben unverändert, bis du sie ausdrücklich umstellst.</div><div><button class="btn small" type="button" id="toV2">In neues Preismodell übernehmen</button></div></div>'+inp;
+    return "<"+tag2+' class="f"><span>'+esc(f.l)+"</span>"+inp+'<span class="hint">Je Leistung: Stunden und Anzahl. Ob die Anzahl Mitarbeiter, Fahrzeuge oder Tage zählt, hängt von der Abrechnungsart der Leistung ab. Alles wird zusammengerechnet.</span></'+tag2+">";
   }
   else if(f.t==="hours"){const cv=val==null||val===""?"":Number(val);let o='<option value="">–</option>';for(let i=1;i<=24;i++)o+='<option value="'+i+'"'+(i===cv?" selected":"")+">"+i+(i===1?" Stunde":" Stunden")+"</option>";if(cv&&cv>24)o+='<option value="'+cv+'" selected>'+cv+" Stunden</option>";inp='<select id="'+id+'"'+dis+">"+o+"</select>"}
   else if(f.t==="combo")inp='<input id="'+id+'" list="dl_'+f.n+'" value="'+esc(val)+'"'+dis+'><datalist id="dl_'+f.n+'">'+f.opts().map(o=>'<option value="'+esc(o)+'"></option>').join("")+"</datalist>";
@@ -998,8 +1370,8 @@ function fieldHTML(f,val,d){
     const opts=rankList().filter(o=>o.nr>=min||o.nr===cv);
     inp='<select id="'+id+'"'+dis+">"+(cv===99||!opts.some(o=>o.nr===cv)?'<option value="'+cv+'" selected>– kein Rang –</option>':"")+opts.map(o=>'<option value="'+o.nr+'"'+(o.nr===cv?" selected":"")+">"+(rankPos(o.nr)+1)+". "+esc(o.name)+"</option>").join("")+"</select>";
   }else if(f.t==="select"){
-    const opts=(typeof f.o==="function"?f.o():f.o).slice();if(val&&opts.indexOf(val)<0)opts.push(val);
-    inp='<select id="'+id+'"'+dis+">"+opts.map(o=>"<option"+(o===val?" selected":"")+' value="'+esc(o)+'">'+esc(o)+"</option>").join("")+"</select>";
+    const opts=(typeof f.o==="function"?f.o():f.o).map(o=>typeof o==="object"?o:{v:o,l:o});if(val!=null&&val!==""&&!opts.some(o=>String(o.v)===String(val)))opts.push({v:val,l:String(val)});
+    inp='<select id="'+id+'"'+dis+">"+opts.map(o=>"<option"+(String(o.v)===String(val)?" selected":"")+' value="'+esc(o.v)+'">'+esc(o.l)+"</option>").join("")+"</select>";
   }else if(f.t==="ref"){
     const items=data[f.ref].slice().sort(ENT[f.ref].sort),cv=canon(f.ref,val);
     inp='<select id="'+id+'"'+dis+'><option value="">– wählen –</option>'+items.map(i=>'<option value="'+esc(i.id)+'"'+(i.id===cv?" selected":"")+">"+esc(optLabel(f.ref,i))+"</option>").join("")+"</select>";
@@ -1011,9 +1383,10 @@ function fieldHTML(f,val,d){
   }else if(f.t==="number")inp='<input id="'+id+'" type="text" inputmode="decimal" value="'+esc(val==null?"":String(val).replace(".",","))+'"'+dis+">";
   else inp='<input id="'+id+'" type="'+(f.t==="date"?"date":f.t==="time"?"time":f.t==="tel"?"tel":"text")+'" value="'+esc(val)+'"'+dis+">";
   const tag=f.t==="multiref"?"div":"label";
-  return "<"+tag+' class="f"'+(tag==="label"?' for="'+id+'"':"")+"><span>"+esc(f.l)+req+"</span>"+inp+hint+"</"+tag+">";
+  const lb=f.lblBy?' data-lblf="'+f.lblBy.f+'" data-lblm="'+esc(JSON.stringify(f.lblBy.m))+'"':"";
+  return "<"+tag+' class="f"'+(tag==="label"?' for="'+id+'"':"")+"><span"+lb+">"+esc(f.lblBy&&cur&&cur.vals&&f.lblBy.m[cur.vals[f.lblBy.f]]||f.l)+req+"</span>"+inp+hint+"</"+tag+">";
 }
-function openForm(ek,id,linkId,preset){
+function openForm(ek,id,linkId,preset,v2pos){
   const E=ENT[ek],d=id?byId(ek,id):null;
   if(id&&!d)return;
   if(!d&&!E.canCreate())return;
@@ -1026,6 +1399,21 @@ function openForm(ek,id,linkId,preset){
   if(!d)E.fields.forEach(f=>{if(f.n&&vals[f.n]==null&&f.def!=null)vals[f.n]=f.def});
   if(!d&&preset)Object.assign(vals,preset);
   if(ek==="buchungen"&&d)vals.positionen=getPos(d);
+  $(".sheet").classList.toggle("wide",ek==="buchungen");
+  if(ek==="buchungen"){
+    cur.mode=(v2pos||!d||isV2(d))?"v2":"legacy";
+    if(cur.mode==="v2"){
+      cur.pos=v2pos||(d&&isV2(d)?JSON.parse(JSON.stringify(d.positionen)).map(p=>{p.ma=(p.ma||[]).map(maCanon);p.gs=p.gs||{aktiv:false};return p}):[]);
+      if(!cur.pos.length)cur.pos=[newPos("",{})];
+      if(!d&&vals.pauschale==null)vals.pauschale=LISTS.einsatzpauschale||0;
+    }
+  }
+  if(ek==="preise"){
+    const t=tarifOf(d||{leistung:"",v:2,unit:"sk",takt:30,aktiv:true,gsOk:true});
+    if(d&&!d.v){Object.assign(vals,{unit:t.unit,satz:t.bestand?"":t.satz,minStd:t.minStd,takt:String(t.takt),besatzung:t.besatzung,von:t.von,bis:t.bis,gsOk:t.gsOk,aktiv:true})}
+    if(d&&d.v===2){vals.aktiv=d.aktiv!==false;vals.gsOk=d.gsOk!==false;vals.takt=String(d.takt||30)}
+    cur.tarif=t;
+  }
   cur.vals=vals;
   let h="",inGroup=false;
   if(freischalten){
@@ -1037,16 +1425,21 @@ function openForm(ek,id,linkId,preset){
     h+='<div class="notice info"><div>Wähle Rang und bei Bedarf Rechte, dann „Freischalten“. Danach kann <b>'+esc(d.name)+'</b> die Seite nutzen.</div></div>';
     if(cands.length)h+='<label class="f" for="f_link"><span>Schon als Mitarbeiter angelegt?</span><select id="f_link"><option value="">Nein, als neuen Mitarbeiter freischalten</option>'+cands.map(m=>'<option value="'+esc(m.id)+'"'+(old&&old.id===m.id?" selected":"")+">Verbinden mit: "+esc(m.name||"")+" ("+esc(rankName(rk(m)))+")</option>").join("")+'</select><span class="hint">Dann werden Rang, Telefon, Notizen und alle Einteilungen aus dem bestehenden Eintrag übernommen, und der doppelte Eintrag verschwindet.'+(P.full?"":" Rechte für Kontakte und Intern vergibt danach die Geschäftsführung.")+"</span></label>";
   }
+  if(ek==="preise"&&d&&!d.v){const t=cur.tarif;
+    h+='<div class="notice'+(t.bestand?"":" info")+'"><div><b>'+(t.bestand?"Preisprüfung erforderlich.":"Automatisch aus dem Bestandstarif übernommen.")+'</b> Bisher: '+esc(legacyText(t.legacy))+". "+(t.bestand?"Dieser Tarif lässt sich nicht eindeutig umrechnen und wird bis dahin weiter als Bestandstarif berechnet. Lege den neuen Tarif fest und speichere.":"Prüfe die Werte und bestätige sie mit Speichern.")+(t.hinweis.length?" Außerdem: "+esc(t.hinweis.join(", "))+".":"")+"</div></div>"}
   if(!d&&ek==="mitarbeiter")h+='<div class="notice info"><div>Der Mitarbeiter wird ohne Login angelegt und kann trotzdem Terminen und Buchungen zugeteilt werden. Registriert er sich später, verbindest du ihn beim Freischalten mit diesem Eintrag.</div></div>';
   E.fields.forEach(f=>{
     if(f.group){if(inGroup)h+="</div>";h+=fieldHTML(f);inGroup=true;return}
+    if(ek==="buchungen"&&cur.mode==="v2"&&f.n==="mitarbeiter"){h+='<div class="f"><span>Eingeteilte Mitarbeiter (Übersicht)</span><div id="v2ma" class="calcinfo"></div><span class="hint">Die Zuordnung erfolgt oben je Leistung.</span></div>';return}
+    if(ek==="buchungen"&&cur.mode==="v2"&&f.n==="betrag"){h+='<input type="hidden" id="f_betrag" value=""><div class="f"><span>Preisaufschlüsselung</span><div id="v2tot" class="totals"></div></div>';return}
     h+=fieldHTML(f,vals[f.n],d||{});
+    if(ek==="buchungen"&&cur.mode==="v2"&&f.n==="aufschlagGrund")h+='<div class="warnline" id="aufGrundErr"></div><div class="warnline" id="aufWarn"></div>';
     if(ek==="buchungen"&&f.n==="rabatt")h+='<div class="calcinfo" id="rabattInfo" hidden></div>';
-    if(ek==="buchungen"&&f.n==="betrag")h+='<div class="calcinfo" id="calcInfo">Wähle eine Leistung, dann wird der Betrag berechnet.</div>';
+    if(ek==="buchungen"&&f.n==="betrag"&&cur.mode!=="v2")h+='<div class="calcinfo" id="calcInfo">Wähle eine Leistung, dann wird der Betrag berechnet.</div>';
   });
   if(inGroup)h+="</div>";
   h+='<div class="err" id="err" role="alert" hidden></div>';
-  if(ed)h+='<div class="actions"><button class="btn" type="submit" id="saveBtn">'+(freischalten?"Freischalten":"Speichern")+'</button><button class="btn ghost" type="button" id="cancelBtn">Abbrechen</button>'+(d&&E.canDelete(d)?'<span class="spacer"></span><button class="btn danger" type="button" id="delBtn">Löschen</button>':"")+"</div>";
+  if(ed)h+='<div class="actions'+(ek==="buchungen"&&cur.mode==="v2"?' sticky"><div class="foot-total" id="v2foot"></div>':'">')+'<button class="btn" type="submit" id="saveBtn">'+(freischalten?"Freischalten":"Speichern")+'</button><button class="btn ghost" type="button" id="cancelBtn">Abbrechen</button>'+(d&&E.canDelete(d)?'<span class="spacer"></span><button class="btn danger" type="button" id="delBtn">Löschen</button>':"")+"</div>";
   else h+='<div class="actions"><button class="btn ghost" type="button" id="cancelBtn">Schließen</button></div>';
   if(d){
     const parts=[];
@@ -1057,11 +1450,33 @@ function openForm(ek,id,linkId,preset){
   $("#form").innerHTML=h;
   if(!ed)Array.prototype.forEach.call($("#form").elements,el=>{if(el.id!=="cancelBtn")el.disabled=true});
   $("#scrim").hidden=false;
+  $("#form").querySelectorAll("[data-lblf]").forEach(sp=>{
+    const src=$("#f_"+sp.dataset.lblf),m=JSON.parse(sp.dataset.lblm);if(!src)return;
+    src.addEventListener("change",()=>{if(m[src.value])sp.firstChild.textContent=m[src.value]});
+  });
   $("#form").querySelectorAll("[data-showif]").forEach(w=>{
     const src=$("#f_"+w.dataset.showif);if(!src)return;
-    const upd=()=>{w.hidden=src.value!==w.dataset.eq};src.addEventListener("change",upd);upd();
+    const upd=()=>{w.hidden=w.dataset.eq.split("|").indexOf(src.value)<0};src.addEventListener("change",upd);upd();
   });
-  if(ek==="buchungen"&&ed){
+  if(ek==="buchungen"&&cur.mode==="v2"){
+    v2Bind();
+    const rabInfo=(apply)=>{
+      const kid=$("#f_kunde").value,info=$("#rabattInfo");if(!info)return;
+      if(!kid){info.hidden=true;return}
+      const kr=kundenRabatt(kid,$("#f_datum").value);
+      if(apply)$("#f_rabatt").value=kr.p?String(kr.p).replace(".",","):"";
+      const curV=num($("#f_rabatt").value)||0;info.hidden=false;
+      info.innerHTML=kr.names.length?"Sondervereinbarung: "+esc(kr.names.join(", "))+(Math.abs(curV-kr.p)>0.001?' · <button class="linkbtn" type="button" id="rabApply">'+esc(String(kr.p).replace(".",","))+" % übernehmen</button>":""):"Keine aktive Rabatt-Vereinbarung für diesen Kunden.";
+    };
+    cur.rabInfo=rabInfo;cur.calc=v2Recalc;
+    if(ed){
+      $("#f_kunde").addEventListener("change",()=>{rabInfo(true);v2Recalc()});
+      $("#f_datum").addEventListener("change",()=>{rabInfo(!d)});
+      $("#f_rabatt").addEventListener("input",()=>rabInfo(false));
+    }
+    rabInfo(false);v2Recalc();
+  }
+  if(ek==="buchungen"&&ed&&cur.mode!=="v2"){
     const read=()=>calcAll(readPos(),num($("#f_aufschlag").value),num($("#f_rabatt").value));
     const rabInfo=(apply)=>{
       const kid=$("#f_kunde").value,info=$("#rabattInfo");
@@ -1077,7 +1492,9 @@ function openForm(ek,id,linkId,preset){
     cur.betragManual=!!(d&&d.betrag!=null&&(!c0||Math.abs(c0.sum-Number(d.betrag))>0.009));
     const calc=()=>{
       $("#f_positionen").querySelectorAll(".posrow").forEach(r=>{
-        const pr=byId("preise",r.querySelector(".pos-l").value),h=r.querySelector(".pos-h").value,n=parseInt(r.querySelector(".pos-n").value,10)||1;
+        const pr=byId("preise",r.querySelector(".pos-l").value),h=r.querySelector(".pos-h").value,z=zOf(pr),sel=r.querySelector(".pos-n");
+        if(r.dataset.z!==z){const nv=z==="ma"?Math.max(1,document.querySelectorAll("#f_mitarbeiter input:checked").length):1;r.dataset.z=z;sel.innerHTML=countOpts(z,nv);sel.style.visibility=z==="fix"?"hidden":""}
+        const n=z==="fix"?1:(parseInt(sel.value,10)||1);
         r.querySelector(".pos-p").textContent=pr?money(Math.round(calcBetrag(pr,h,0).sum*n*100)/100):"";
       });
       const c=read(),info=$("#calcInfo");
@@ -1163,11 +1580,27 @@ $("#form").addEventListener("submit",async ev=>{
     finally{saving=false}
     return;
   }
+  if(cur.ek==="buchungen"&&cur.mode==="v2"){
+    const err=v2Validate();
+    if(err){showErr(err.msg);if(err.field){const fe=$("#"+err.field);if(fe)fe.focus()}return}
+    const k=calcBooking(cur.pos,body.aufschlag,body.rabatt,body.pauschale);
+    body.positionen=v2Serialize();body.preismodell=2;
+    body.mitarbeiter=[...new Set(body.positionen.flatMap(p=>p.ma||[]))];
+    body.personalOffen=body.positionen.some(p=>(p.ma||[]).length<bedarf(p));
+    body.betrag=k.end;body.kalk={haupt:k.haupt,gs:k.gs,pausch:k.pausch,zw:k.zw,aufP:k.aufP,aufB:k.aufB,rabP:k.rabP,rabB:k.rabB,end:k.end};
+    body.pauschale=k.pausch;
+  }
+  if(cur.ek==="preise"){
+    if(body.unit&&!UNITS[body.unit])body.unit="sk";
+    if(body.satz==null||body.satz<0){showErr("Bitte einen gültigen Preis angeben.");$("#f_satz").focus();return}
+    body.v=2;body.takt=Number(body.takt)||30;body.minStd=Math.max(0,Number(body.minStd)||0);body.besatzung=Math.max(1,parseInt(body.besatzung,10)||1);
+  }
   if(cur.id&&cur.ek==="mitarbeiter")body=onlyChanged(body,cur.d);
   if(cur.ek==="termine"&&body.teilnehmer){const nm={};body.teilnehmer.forEach(id=>{const m=byId("mitarbeiter",id);nm[id]=m&&m.name||""});body.teilnehmerNamen=nm}
   saving=true;$("#saveBtn").disabled=true;
   try{
-    if(cur.ek==="buchungen"&&body.positionen){const pl=body.positionen;body.leistung=pl[0]?pl[0].leistung:"";const mx=Math.max(0,...pl.map(x=>Number(x.stunden)||0));body.stunden=mx||null}
+    if(cur.ek==="buchungen"&&body.positionen&&!body.preismodell){const pl=body.positionen;body.leistung=pl[0]?pl[0].leistung:"";const mx=Math.max(0,...pl.map(x=>Number(x.stunden)||0));body.stunden=mx||null}
+    if(cur.ek==="buchungen"&&body.preismodell===2){const pl=body.positionen;body.leistung=pl[0]?pl[0].leistung:"";const mx=Math.max(0,...pl.map(x=>Number(x.stunden)||0));body.stunden=mx||null}
     if(cur.ek==="buchungen"&&body.bezahlt&&!(cur.d&&cur.d.bezahlt))body.bezahltAm=new Date().toISOString();
     let savedId=cur.id;
     if(cur.id)await updateDoc(doc(db,cur.ek,cur.id),Object.assign(body,stamp(false)));
@@ -1181,7 +1614,7 @@ $("#form").addEventListener("submit",async ev=>{
 /* ---------- Klicks ---------- */
 document.addEventListener("click",async ev=>{
   const t=ev.target;
-  if(t.id==="closeBtn"||t.id==="cancelBtn"||t===$("#scrim")){closeForm();return}
+  if(t.id==="closeBtn"||t.id==="cancelBtn"){closeForm();return}
   if(t.closest("#menuBtn")){const s=$("#side"),o=!s.classList.contains("open");s.classList.toggle("open",o);$("#menuBtn").setAttribute("aria-expanded",String(o));return}
   if(t.id==="logoutBtn"){await signOut(auth);return}
   if(t.id==="tabLogin"||t.id==="tabReg"){setAuthMode(t.id==="tabReg"?"reg":"login");return}
@@ -1198,9 +1631,18 @@ document.addEventListener("click",async ev=>{
   }
   if(t.id==="newBtn"){openForm(tab);return}
   const nb=t.closest("[data-new]");if(nb){const q=nb.dataset.new.split(":");openForm(q[0],null,null,q[0]==="sonder"?{richtung:q[1]==="w"?R_W:R_K}:null);return}
-  if(t.closest("[data-posadd]")&&cur){const box=$("#f_positionen");const nChk=document.querySelectorAll("#f_mitarbeiter input:checked").length;box.insertAdjacentHTML("beforeend",posRowHTML({leistung:"",stunden:null,personen:Math.max(1,nChk)},""));if(cur.calc)cur.calc();box.lastElementChild.querySelector(".pos-l").focus();return}
+  if(t.closest("[data-posadd]")&&cur){const box=$("#f_positionen");const nChk=0;box.insertAdjacentHTML("beforeend",posRowHTML({leistung:"",stunden:null,personen:Math.max(1,nChk)},""));if(cur.calc)cur.calc();box.lastElementChild.querySelector(".pos-l").focus();return}
   if(t.closest("[data-posdel]")&&cur){const box=$("#f_positionen"),row=t.closest(".posrow");if(box.children.length>1)row.remove();else{row.querySelector(".pos-l").value="";row.querySelector(".pos-h").value=""}if(cur.calc)cur.calc();return}
   if(t.id==="rabApply"&&cur&&cur.rabInfo){cur.rabInfo(true);cur.calc();return}
+  if(t.id==="savePausch"){const v=num($("#ls_pausch").value);if(v==null||v<0){alertBox("Bitte einen gültigen Betrag eingeben.");return}const next=JSON.parse(JSON.stringify(LISTS));next.einsatzpauschale=v;einstMsg="";saveLists(next);return}
+  if(cur&&cur.mode==="v2"){
+    if(t.id==="pcAdd"){cur.pos.push(newPos("",{}));rerenderCards();const last=document.querySelector(".pcard:last-child .pc-l");if(last)last.focus();return}
+    const pd=t.closest("[data-pcdel]");if(pd){cur.pos.splice(parseInt(pd.dataset.pcdel,10),1);if(!cur.pos.length)cur.pos.push(newPos("",{}));rerenderCards();return}
+    const aa=t.closest("[data-abadd]");if(aa){const i=parseInt(aa.dataset.abadd,10),p=cur.pos[i],last=(p.abende||[]).filter(Boolean).slice(-1)[0]||draftHead().datum;let nd="";if(last){const x=new Date(last+"T12:00:00");x.setDate(x.getDate()+1);nd=x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")}p.abende=(p.abende||[]).concat([nd]);rerenderCard(i);return}
+    const ad=t.closest("[data-abdel]");if(ad){const q=ad.dataset.abdel.split(":").map(Number);cur.pos[q[0]].abende.splice(q[1],1);rerenderCard(q[0]);return}
+    if(t.id==="pcRetarif"){cur.pos.forEach(p=>{if(!p.leistung)return;const tt=tarifOf(byId("preise",p.leistung));if(tt){snapInto(p,Object.assign({},tt,{}));p.von=tt.von;p.bis=tt.bis}});rerenderCards();const ri=$("#retarifInfo");if(ri)ri.innerHTML="<b>Aktuelle Tarife übernommen.</b> Prüfe die neue Summe und bestätige mit Speichern.";return}
+  }
+  if(t.id==="toV2"&&cur&&cur.d){const r=legacyToV2(cur.d);if(r.err){showErr(r.err);return}openForm("buchungen",cur.id,null,null,r.pos);const ri=$("#retarifInfo");if(ri)ri.innerHTML="<b>In das neue Preismodell übernommen</b> mit den aktuellen Tarifen. Der gespeicherte Betrag ändert sich erst beim Speichern.";return}
   if(t.id==="recalc"&&cur&&cur.calc){cur.betragManual=false;cur.calc();return}
   const ls=t.closest("[data-ls]");if(ls){listAction(ls.dataset.ls);return}
   const la=t.closest("[data-lsadd]");if(la){listAdd(la.dataset.lsadd);return}
@@ -1238,6 +1680,7 @@ document.addEventListener("click",async ev=>{
 document.addEventListener("change",async ev=>{
   const t=ev.target;
   if(t.dataset&&t.dataset.lsren){listRename(t.dataset.lsren,t.value);return}
+  if(t.dataset&&t.dataset.lsz){listZ(t.dataset.lsz,t.value);return}
   if(t.id==="abrM"){abrMonat=t.value;render();return}
   if(t.id==="f_link"&&cur){openForm(cur.ek,cur.id,t.value||null);return}
   if(t.id==="bkFile"){if(t.files&&t.files[0])readBackupFile(t.files[0]);return}
@@ -1339,6 +1782,7 @@ onAuthStateChanged(auth,user=>{
   listsUnsub=onSnapshot(doc(db,"einstellungen","listen"),snap=>{
     const d=snap.exists()?snap.data():{};
     LISTS={};Object.keys(DEFAULT_LISTS).forEach(k=>{LISTS[k]=Array.isArray(d[k])&&d[k].length?d[k]:JSON.parse(JSON.stringify(DEFAULT_LISTS[k]))});
+    LISTS.einsatzpauschale=Math.max(0,Number(d.einsatzpauschale)||0);
     render();
   },()=>{});
   meUnsub=onSnapshot(doc(db,"mitarbeiter",uid),{includeMetadataChanges:true},snap=>{
