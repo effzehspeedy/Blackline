@@ -978,7 +978,7 @@ function getPos(b){
 }
 function v2PosLabel(x,withHours){
   const U=UNITS[x.unit]||UNITS.sk,k=U.kind,n=parseInt(x.anzahl,10)||0;let d=[];
-  if(withHours){if(k==="abend")d.push(n+" "+(n===1?U.one:U.cnt)+", "+(x.abende||[]).length+" Abende");else if(k!=="pausch"){d.push(fmtH(x.stunden)+" Std.");d.push(n+" "+(n===1?U.one:U.cnt))}}
+  if(withHours){if(k==="abend")d.push(n+" "+(n===1?U.one:U.cnt)+", "+(x.abende||[]).length+" Abende");else if(k==="pausch"){if(x.stunden)d.push(fmtH(x.stunden)+" Std.");if(n)d.push(n+(n===1?" Sicherheitskraft":" Sicherheitskräfte"))}else{d.push(fmtH(x.stunden)+" Std.");d.push(n+" "+(n===1?U.one:U.cnt))}}
   return (x.name||"Leistung")+(d.length?" ("+d.join(", ")+")":"")+(x.gs&&x.gs.aktiv?" + Gefahrenschutz":"");
 }
 function posText(b,withHours){
@@ -1079,11 +1079,11 @@ function billH(h,minStd,takt){
   if(h<=m)return m;
   return r2(m+Math.ceil((h-m)/st-1e-9)*st);
 }
-function bedarf(p){const k=kindOf(p),n=Math.max(0,parseInt(p.anzahl,10)||0);return k==="pers"?n:k==="veh"?n*(Number(p.besatzung)||1):0}
+function bedarf(p){const k=kindOf(p),n=Math.max(0,parseInt(p.anzahl,10)||0);return k==="pers"||k==="pausch"?n:k==="veh"?n*(Number(p.besatzung)||1):0}
 
 /* Position (Preisstand wird in der Buchung gespeichert) */
 function snapInto(p,t){
-  Object.assign(p,{v:2,leistung:t.id,name:t.name,unit:t.unit,satz:t.satz,minStd:t.minStd,takt:t.takt,besatzung:t.besatzung,gsOk:t.gsOk,bestand:t.bestand,legacy:t.legacy,umfang:t.umfang,von:p.von||t.von,bis:p.bis||t.bis});
+  Object.assign(p,{v:2,leistung:t.id,name:t.name,unit:t.unit,satz:t.satz,tarifSatz:t.satz,minStd:t.minStd,takt:t.takt,besatzung:t.besatzung,gsOk:t.gsOk,bestand:t.bestand,legacy:t.legacy,umfang:t.umfang,von:p.von||t.von,bis:p.bis||t.bis});
   p.gs=p.gs||{aktiv:false,anzahl:0,stunden:0,manA:false,manH:false};
   p.gs.satz=gsSatz();
   if(!t.gsOk)p.gs.aktiv=false;
@@ -1107,7 +1107,7 @@ function calcPos(p){
   if(k==="abend"){
     const a=(p.abende||[]).filter(Boolean).length;
     o.haupt=r2(n*a*p.satz);o.text=n+" "+unit(n)+" × "+a+(a===1?" Abend":" Abende")+" × "+money(p.satz)+" = "+money(o.haupt);
-  }else if(k==="pausch"){o.haupt=r2(p.satz);o.text="Pauschal "+money(p.satz)}
+  }else if(k==="pausch"){o.haupt=r2(p.satz);o.text="Pauschal "+money(p.satz)+(h?" für "+fmtH(h)+" Std.":"")+(p.tarifSatz!=null&&Math.abs(Number(p.tarifSatz)-Number(p.satz))>0.009?" (vereinbart, Tarif "+money(p.tarifSatz)+")":"")}
   else if(p.bestand&&p.legacy){
     const one=legacyPrice(p.legacy,h);o.haupt=r2(one*n);
     o.text=n+" "+unit(n)+" × "+money(one)+" (Bestandstarif, "+fmtH(h)+" Std.) = "+money(o.haupt);
@@ -1136,7 +1136,6 @@ const isV2=b=>b&&(b.preismodell===2||(Array.isArray(b.positionen)&&b.positionen.
 function tsOf(d,t){if(!d||!t)return null;const pr=String(t).split(":").map(Number);const x=new Date(d+"T00:00:00");if(isNaN(x))return null;x.setHours(pr[0]||0,pr[1]||0,0,0);return x.getTime()}
 function posIntervals(p,head){
   if(kindOf(p)==="abend")return (p.abende||[]).filter(Boolean).map(d=>{const s=tsOf(d,p.von||"18:00");let e=tsOf(d,p.bis&&p.bis!=="24:00"?p.bis:"00:00");if(e<=s)e+=86400000;return {s,e,lab:p.name}});
-  if(kindOf(p)==="pausch")return [];
   const s=tsOf(head.datum,p.start||head.uhrzeit);if(s==null)return [];
   return [{s,e:s+Math.max(Number(p.stunden)||0,0.5)*3600000,lab:p.name}];
 }
@@ -1182,6 +1181,11 @@ function cardHTML(p,i){
     h+='<label class="f"><span>Dauer</span><select class="pc-h"'+ro+">"+hoursOpts(Number(p.stunden)||0.5)+"</select></label>";
     h+='<label class="f"><span>Anzahl '+esc(U.cnt)+'</span><input class="pc-n" type="number" min="1" max="99" step="1" inputmode="numeric" value="'+esc(p.anzahl)+'"'+ro+"></label>";
     h+='<label class="f"><span>Startzeit</span><input class="pc-start" type="time" value="'+esc(p.start||"")+'"'+ro+'><span class="hint">Leer = Buchungsuhrzeit</span></label>';
+  }else if(k==="pausch"){
+    h+='<label class="f"><span>Vereinbarter Pauschalpreis ($)</span><input class="pc-satz" type="text" inputmode="decimal" value="'+esc(String(p.satz==null?"":p.satz).replace(".",","))+'"'+ro+'><span class="hint">Gilt nur für diese Buchung'+(p.tarifSatz!=null?" · Tarif: "+esc(money(p.tarifSatz)):"")+"</span></label>";
+    h+='<label class="f"><span>Dauer</span><select class="pc-h"'+ro+">"+hoursOpts(Number(p.stunden)||0.5)+'</select><span class="hint">Für Termin und Personalplanung, ändert den Preis nicht</span></label>';
+    h+='<label class="f"><span>Anzahl Sicherheitskräfte</span><input class="pc-n" type="number" min="0" max="99" step="1" inputmode="numeric" value="'+esc(p.anzahl)+'"'+ro+'><span class="hint">Personalbedarf, ändert den Preis nicht</span></label>';
+    h+='<label class="f"><span>Startzeit</span><input class="pc-start" type="time" value="'+esc(p.start||"")+'"'+ro+'><span class="hint">Leer = Buchungsuhrzeit</span></label>';
   }else if(k==="abend"){
     h+='<label class="f"><span>Anzahl Objekte</span><input class="pc-n" type="number" min="1" max="99" step="1" inputmode="numeric" value="'+esc(p.anzahl)+'"'+ro+"></label>";
     h+='<label class="f"><span>Zeitfenster von</span><input class="pc-von" type="time" value="'+esc(p.von||"18:00")+'"'+ro+"></label>";
@@ -1196,7 +1200,7 @@ function cardHTML(p,i){
   }
   if(k==="veh")info.push(esc("Enthaltene Besatzung: "+p.besatzung+" je "+U.one+" (im Fahrzeugpreis enthalten)")+' → <b class="pc-crew"></b>');
   if(k==="abend")info.push(esc("Preis je Objekt und Abend: "+money(p.satz)+" · Zeitfenster "+(p.von||"18:00")+"–"+bisTxt(p.bis)+" Uhr. Reserviert Bereitschaft, tatsächliche Ausfahrten separat als Einsatz buchen."));
-  if(k==="pausch")info.push(esc("Pauschalpreis: "+money(p.satz)));
+  if(k==="pausch")info.push(esc("Fester Preis für den Auftrag, unabhängig von Dauer und Personal. Rabatt und Aufschlag wirken wie gewohnt."));
   h+='<div class="pc-info">'+info.map(x=>"<div>"+x+"</div>").join("")+"</div>";
   h+='<div class="pc-calc"><div class="pc-text"></div><div class="pc-note"></div><div class="pc-sum"></div></div>';
   if(p.gsOk&&(k==="pers"||k==="veh")){
@@ -1204,7 +1208,7 @@ function cardHTML(p,i){
     if(p.gs&&p.gs.aktiv)h+='<div class="pc-grid"><label class="f"><span>Betroffene Sicherheitskräfte</span><input class="pc-gn" type="number" min="1" step="1" inputmode="numeric" value="'+esc(p.gs.anzahl)+'"'+ro+'></label><label class="f"><span>Dauer Gefahrenschutz</span><select class="pc-gh"'+ro+">"+hoursOpts(Number(p.gs.stunden)||0.5)+'</select></label></div><div class="pc-gswarn warnline"></div><div class="pc-calc gs"><div class="pc-gstext"></div><div class="pc-gssum"></div></div>';
     h+="</div>";
   }
-  if(k==="pers"||k==="veh"||k==="abend"){
+  if(k==="pers"||k==="veh"||k==="abend"||k==="pausch"){
     const ids=(p.ma||[]);
     h+='<div class="pc-staff"><div class="pc-need"></div><div class="chips">'+maChoices().map(m=>'<label><input type="checkbox" class="pc-ma" value="'+esc(m.id)+'"'+(ids.includes(m.id)?" checked":"")+ro+">"+esc(m.name||"")+"</label>").join("")+'</div><div class="pc-conf warnline"></div></div>';
   }
@@ -1268,6 +1272,7 @@ function v2Validate(){
   const pos=cur.pos.filter(p=>p.leistung);
   if(!pos.length)return {msg:"Wähle mindestens eine Leistung aus."};
   for(const p of pos){
+    if(kindOf(p)==="pausch"&&!(Number(p.satz)>=0))return {msg:"„"+p.name+"“: Bitte einen gültigen Pauschalpreis angeben."};
     if(kindOf(p)!=="pausch"&&!(parseInt(p.anzahl,10)>=1))return {msg:"„"+p.name+"“: Anzahl muss mindestens 1 sein."};
     if(kindOf(p)==="abend"&&!(p.abende||[]).filter(Boolean).length)return {msg:"„"+p.name+"“: Mindestens einen Abend auswählen."};
   }
@@ -1280,7 +1285,7 @@ function v2Validate(){
 }
 function v2Serialize(){
   return cur.pos.filter(p=>p.leistung).map(p=>{
-    const o={v:2,leistung:p.leistung,name:p.name,unit:p.unit,satz:p.satz,minStd:p.minStd,takt:p.takt,besatzung:p.besatzung,gsOk:!!p.gsOk,bestand:!!p.bestand,legacy:p.legacy||null,umfang:p.umfang||"",
+    const o={v:2,leistung:p.leistung,name:p.name,unit:p.unit,satz:Number(p.satz)||0,tarifSatz:p.tarifSatz==null?null:Number(p.tarifSatz),minStd:p.minStd,takt:p.takt,besatzung:p.besatzung,gsOk:!!p.gsOk,bestand:!!p.bestand,legacy:p.legacy||null,umfang:p.umfang||"",
       stunden:Number(p.stunden)||0,anzahl:parseInt(p.anzahl,10)||0,start:p.start||"",ma:(p.ma||[]).slice()};
     if(kindOf(p)==="abend"){o.abende=(p.abende||[]).filter(Boolean);o.von=p.von||"18:00";o.bis=p.bis||"00:00"}
     o.gs=p.gs&&p.gs.aktiv?{aktiv:true,anzahl:Math.min(parseInt(p.gs.anzahl,10)||0,bedarf(p)),stunden:Math.min(Number(p.gs.stunden)||0,Number(p.stunden)||0),satz:Number(p.gs.satz)||0,manA:!!p.gs.manA,manH:!!p.gs.manH}:{aktiv:false};
@@ -1329,6 +1334,7 @@ function v2Bind(){
     if(["f_aufschlag","f_rabatt","f_pauschale","f_aufschlagGrund"].indexOf(t.id)>-1){v2Recalc();return}
     const i=idx(t);if(i<0||!cur||cur.mode!=="v2")return;const p=cur.pos[i];
     if(t.classList.contains("pc-n")){p.anzahl=Math.max(0,parseInt(t.value,10)||0);syncGs(p,i);v2Recalc()}
+    else if(t.classList.contains("pc-satz")){const v=num(t.value);p.satz=v==null||v<0?0:v;v2Recalc()}
     else if(t.classList.contains("pc-gn")){p.gs.manA=true;let v=parseInt(t.value,10)||0;const b=bedarf(p);const w=document.querySelector('.pcard[data-i="'+i+'"] .pc-gswarn');if(v>b){v=b;t.value=b;if(w)w.textContent="Höchstens "+b+" (Personalstärke der Hauptleistung)."}else if(w)w.textContent="";p.gs.anzahl=v;v2Recalc()}
   });
   F.addEventListener("change",ev=>{if(cur&&cur.mode==="v2"&&(ev.target.id==="f_datum"||ev.target.id==="f_uhrzeit"))v2Recalc()});
